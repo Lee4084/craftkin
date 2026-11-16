@@ -19,21 +19,11 @@ final class WebIntegrationUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-uiTesting", "-disableOnlineServices", "-resetOnboarding", "-icloudAvailable", "1"]
         app.launch()
-        app.buttons["Get Started"].tap()
-        app.buttons["Continue"].tap()
-        app.buttons["Set Up My Space"].tap()
-        app.buttons["Create a Family Space"].tap()
-        let name = app.textFields["Family Space name"]
-        name.tap()
-        name.typeText("Routing Test")
-        app.buttons["Create Family Space"].tap()
-        app.buttons["Continue to Library"].tap()
         XCTAssertTrue(app.staticTexts["online-services-unavailable"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.navigationBars.count, 0)
         app.buttons["online-services-close"].tap()
-        XCTAssertTrue(app.buttons["Continue to Library"].waitForExistence(timeout: 5))
-        app.buttons["Continue to Library"].tap()
-        XCTAssertTrue(app.staticTexts["online-services-unavailable"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Get Started"].waitForExistence(timeout: 5))
+
     }
 
     @MainActor

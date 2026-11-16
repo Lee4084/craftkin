@@ -31,6 +31,16 @@ struct WebSecureStore {
         return value
     }
 
+    func createIfAbsent(_ value: String, account: String) throws -> String {
+        var query = base(account)
+        query[kSecValueData as String] = Data(value.utf8)
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecDuplicateItem, let existing = try read(account) { return existing }
+        guard status == errSecSuccess else { throw WebIntegrationError.unavailable }
+        return value
+    }
+
     func installationID() throws -> String {
         let account = IntegrationConstants.Storage.installation
         if let existing = try read(account), !existing.isEmpty { return existing }

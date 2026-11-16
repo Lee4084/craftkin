@@ -1,12 +1,13 @@
 import Foundation
 
 enum WebBridgeCommand: Equatable {
-    case endSession, internalPage(URL), externalPage(URL), event(Data), transaction(Data)
+    case continueNative, endSession, internalPage(URL), externalPage(URL), event(Data), transaction(Data)
     case settings, keepAwake(Bool), close, history(Bool), contact, ignored
 
     var actionID: String {
         typealias B = IntegrationConstants.Bridge
         switch self {
+        case .continueNative: return B.continueNative
         case .endSession: return B.endSession
         case .internalPage: return B.internalPage
         case .externalPage: return B.externalPage
@@ -173,6 +174,7 @@ struct WebBridgeParser {
         default:
             guard argument.isEmpty else { throw WebIntegrationError.invalidMessage }
             switch action {
+            case B.continueNative: return .continueNative
             case B.endSession: return .endSession
             case B.settings: return .settings
             case B.close: return .close

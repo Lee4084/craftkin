@@ -31,124 +31,143 @@ final class AppRootCoordinatorTests: XCTestCase {
         XCTAssertTrue(NSClassFromString(delegate) === CraftkinSceneDelegate.self)
     }
 
-    func testCancelFailedLoginRestoresTheExistingNativeRoot() async throws {
-        let store = RootMemoryStore(.native)
+    func testEveryLaunchLoadsH5WithoutReadingLegacyAssignment() async throws {
+        for destination in [AppRootDestination.signedOut, .native, .web] {
+            let store = RootMemoryStore(destination)
+            let service = RootResultService(result: try prepared())
+            let startup = WebIntegrationCoordinator { service }
+            let window = UIWindow(frame: UIScreen.main.bounds)
+            let web = UINavigationController(rootViewController: UIViewController())
+            var nativeBuilds = 0
+            let coordinator = AppRootCoordinator(window: window, startup: startup, store: store, resume: RootNativeResumeMemory(), readIdentity: { nil },
+                hasCompletedSetup: { true }, makeNative: { _, _ in nativeBuilds += 1; return UIViewController() },
+                makeWeb: { _, _ in web })
+            coordinator.start(arguments: [])
+            for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
+            XCTAssertTrue(window.rootViewController === web)
+            XCTAssertEqual(service.calls, 1)
+            XCTAssertEqual(nativeBuilds, 0)
+            XCTAssertEqual(store.destination, destination)
+            coordinator.stop()
+        }
+    }
+
+    func testCloseAndContinueReturnToNativeAndLoginReopensH5() async throws {
+        let startup = WebIntegrationCoordinator { RootResultService(result: try self.prepared()) }
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let native = UIViewController()
+        let web = UINavigationController(rootViewController: UIViewController())
+        var webActions: AppRootActions?
+        var nativeActions: AppRootActions?
+        let coordinator = AppRootCoordinator(window: window, startup: startup, resume: RootNativeResumeMemory(), readIdentity: { nil }, hasCompletedSetup: { true },
+            makeNative: { _, actions in nativeActions = actions; return native },
+            makeWeb: { _, actions in webActions = actions; return web })
+        defer { coordinator.stop() }
+        coordinator.start(arguments: [])
+        for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
+        webActions?.continueNative?()
+        XCTAssertTrue(window.rootViewController === native)
+        nativeActions?.login()
+        for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
+        XCTAssertTrue(window.rootViewController === web)
+        webActions?.signOut()
+        XCTAssertTrue(window.rootViewController === native)
+    }
+
+    func testFailedEntryCanCloseWithoutChangingLegacyDestination() async throws {
+        let store = RootMemoryStore(.web)
         let service = RootResultService(result: nil, failure: WebIntegrationError.network)
         let startup = WebIntegrationCoordinator { service }
         let window = UIWindow(frame: UIScreen.main.bounds)
         let native = UIViewController()
-        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store,
-            hasCompletedSetup: { true }, makeNative: { _, _ in native }, makeWeb: { _, _ in UIViewController() })
+        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store, resume: RootNativeResumeMemory(), readIdentity: { nil },
+            hasCompletedSetup: { false }, makeNative: { _, _ in native }, makeWeb: { _, _ in UIViewController() })
         defer { coordinator.stop() }
         coordinator.start(arguments: [])
-        coordinator.startLogin()
         for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
         let loading = try XCTUnwrap(window.rootViewController as? UIHostingController<WebIntegrationView>)
         loading.rootView.onClose()
         XCTAssertTrue(window.rootViewController === native)
-        XCTAssertEqual(store.destination, .native)
-        XCTAssertNil(native.presentedViewController)
+        XCTAssertEqual(store.destination, .web)
     }
 
-    func testLoginReplacesRootAndColdStartDoesNotBuildNativeHome() async throws {
-        let store = RootMemoryStore(.signedOut)
+    func testContinueAfterSetupOpensLibraryInsteadOfRestoringCompletionLoop() async throws {
+        var completed = false
+        var openedLibrary: [Bool] = []
+        var nativeActions: AppRootActions?
+        var webActions: AppRootActions?
+        let startup = WebIntegrationCoordinator { RootResultService(result: try self.prepared()) }
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let coordinator = AppRootCoordinator(window: window, startup: startup, resume: RootNativeResumeMemory(), readIdentity: { nil }, hasCompletedSetup: { completed },
+            makeNative: { opensLibrary, actions in openedLibrary.append(opensLibrary); nativeActions = actions; return UIViewController() },
+            makeWeb: { _, actions in webActions = actions; return UINavigationController(rootViewController: UIViewController()) })
+        defer { coordinator.stop() }
+        coordinator.start(arguments: [])
+        for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
+        webActions?.signOut()
+        XCTAssertEqual(openedLibrary, [false])
+        completed = true
+        nativeActions?.login()
+        for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
+        webActions?.continueNative?()
+        XCTAssertEqual(openedLibrary, [false, true])
+    }
+
+    func testAcceptedNativeContinuationRestoresNativeDirectlyAfterRelaunch() async throws {
+        let defaults = UserDefaults(suiteName: "test.native.resume." + UUID().uuidString)!
+        let firstStore = UserDefaultsAppNativeResumeStore(defaults: defaults)
+        let identity = "11111111-1111-4111-8111-111111111111"
         let service = RootResultService(result: try prepared())
         let startup = WebIntegrationCoordinator { service }
         let window = UIWindow(frame: UIScreen.main.bounds)
-        let native = UIViewController()
-        let web = UINavigationController(rootViewController: UIViewController())
-        var actions: AppRootActions?
-        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store,
-            hasCompletedSetup: { true }, makeNative: { _, value in actions = value; return native },
-            makeWeb: { _, _ in web })
+        var callbacks: AppRootActions?
+        let coordinator = AppRootCoordinator(window: window, startup: startup, resume: firstStore, readIdentity: { identity },
+            hasCompletedSetup: { true }, makeNative: { _, _ in UIViewController() },
+            makeWeb: { _, actions in callbacks = actions; return UIViewController() })
         coordinator.start(arguments: [])
-        XCTAssertTrue(window.rootViewController === native)
-        actions?.login()
         for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
-        XCTAssertTrue(window.rootViewController === web)
-        XCTAssertNil(web.presentedViewController)
-        XCTAssertEqual(store.destination, .web)
+        callbacks?.continueNative?()
+        XCTAssertEqual(firstStore.identity, identity)
         coordinator.stop()
-        XCTAssertEqual(store.destination, .web)
 
-        let nextWindow = UIWindow(frame: UIScreen.main.bounds)
         let nextService = RootResultService(result: try prepared())
         let nextStartup = WebIntegrationCoordinator { nextService }
-        let nextWeb = UINavigationController(rootViewController: UIViewController())
-        var nativeBuilds = 0
-        let next = AppRootCoordinator(window: nextWindow, startup: nextStartup, store: store,
-            hasCompletedSetup: { true }, makeNative: { _, _ in nativeBuilds += 1; return UIViewController() },
-            makeWeb: { _, _ in nextWeb })
-        defer { next.stop() }
+        let nextWindow = UIWindow(frame: UIScreen.main.bounds)
+        let native = UIViewController()
+        let nextStore = UserDefaultsAppNativeResumeStore(defaults: defaults)
+        let next = AppRootCoordinator(window: nextWindow, startup: nextStartup, resume: nextStore, readIdentity: { identity },
+            hasCompletedSetup: { true }, makeNative: { _, _ in native }, makeWeb: { _, _ in XCTFail("H5 guide must not open"); return UIViewController() })
         next.start(arguments: [])
-        XCTAssertEqual(nativeBuilds, 0)
-        for _ in 0..<100 where nextStartup.state == .connecting { await Task.yield() }
-        XCTAssertEqual(nextService.calls, 1)
-        XCTAssertEqual(nativeBuilds, 0)
-        XCTAssertTrue(nextWindow.rootViewController === nextWeb)
-        XCTAssertNil(nextWeb.presentedViewController)
+        XCTAssertTrue(nextWindow.rootViewController === native)
+        XCTAssertEqual(nextService.calls, 0)
+        next.stop()
+        nextStore.identity = nil
     }
 
-    func testSignOutPreventsAutomaticWebRestoreDespiteSavedSetup() async throws {
-        let store = RootMemoryStore(.web)
+    func testNativeResumeIsBoundToCurrentIdentityAndManualLoginClearsIt() async throws {
+        let identity = "11111111-1111-4111-8111-111111111111"
+        let resume = RootNativeResumeMemory()
+        resume.identity = "22222222-2222-4222-8222-222222222222"
         let service = RootResultService(result: try prepared())
         let startup = WebIntegrationCoordinator { service }
         let window = UIWindow(frame: UIScreen.main.bounds)
-        let login = UIViewController()
-        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store,
-            hasCompletedSetup: { true }, makeNative: { opensLibrary, _ in
-                XCTAssertFalse(opensLibrary)
-                return login
-            }, makeWeb: { _, _ in UIViewController() })
-        defer { coordinator.stop() }
-        coordinator.signOut()
+        var webActions: AppRootActions?
+        var nativeActions: AppRootActions?
+        let web = UIViewController()
+        let coordinator = AppRootCoordinator(window: window, startup: startup, resume: resume, readIdentity: { identity },
+            hasCompletedSetup: { true }, makeNative: { _, actions in nativeActions = actions; return UIViewController() },
+            makeWeb: { _, actions in webActions = actions; return web })
         coordinator.start(arguments: [])
-        XCTAssertEqual(store.destination, .signedOut)
-        XCTAssertEqual(service.calls, 0)
-        XCTAssertTrue(window.rootViewController === login)
-    }
-
-    func testFailureAndCancellationCannotMarkLoginSuccessful() async throws {
-        let store = RootMemoryStore(.signedOut)
-        let service = RootResultService(result: try prepared(), failure: WebIntegrationError.network)
-        let startup = WebIntegrationCoordinator { service }
-        let window = UIWindow(frame: UIScreen.main.bounds)
-        let login = UIViewController()
-        var webBuilds = 0
-        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store,
-            hasCompletedSetup: { true }, makeNative: { _, _ in login },
-            makeWeb: { _, _ in webBuilds += 1; return UIViewController() })
-        defer { coordinator.stop() }
-        coordinator.startLogin()
         for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
-        XCTAssertEqual(startup.state, .failed(.network))
-        XCTAssertEqual(store.destination, .signedOut)
-        XCTAssertEqual(webBuilds, 0)
-        service.failure = nil
-        coordinator.startLogin()
-        coordinator.signOut()
-        for _ in 0..<100 { await Task.yield() }
-        XCTAssertEqual(store.destination, .signedOut)
-        XCTAssertEqual(webBuilds, 0)
-        XCTAssertTrue(window.rootViewController === login)
-    }
-
-    func testNativeStrategySelectsNativeRoot() async throws {
-        let store = RootMemoryStore(.signedOut)
-        let service = RootResultService(result: nil)
-        let startup = WebIntegrationCoordinator { service }
-        let window = UIWindow(frame: UIScreen.main.bounds)
-        let native = UIViewController()
-        let coordinator = AppRootCoordinator(window: window, startup: startup, store: store,
-            hasCompletedSetup: { true }, makeNative: { opensLibrary, _ in
-                XCTAssertTrue(opensLibrary)
-                return native
-            }, makeWeb: { _, _ in XCTFail("Unexpected web root"); return UIViewController() })
-        defer { coordinator.stop() }
-        coordinator.startLogin()
+        XCTAssertTrue(window.rootViewController === web)
+        XCTAssertNil(resume.identity)
+        webActions?.continueNative?()
+        XCTAssertEqual(resume.identity, identity)
+        nativeActions?.login()
+        XCTAssertNil(resume.identity)
         for _ in 0..<100 where startup.state == .connecting { await Task.yield() }
-        XCTAssertTrue(window.rootViewController === native)
-        XCTAssertEqual(store.destination, .native)
+        XCTAssertTrue(window.rootViewController === web)
+        coordinator.stop()
     }
 
     private func prepared() throws -> WebPreparedSession {
@@ -178,3 +197,7 @@ private final class RootResultService: WebSessionPreparing {
     }
 }
 #endif
+
+private final class RootNativeResumeMemory: AppNativeResumeStoring {
+    var identity: String?
+}

@@ -9,10 +9,10 @@ struct WebContainer: UIViewControllerRepresentable {
         Self.makeNavigationController(session: session, onClose: onClose)
     }
 
-    static func makeNavigationController(session: WebPreparedSession, onClose: @escaping () -> Void) -> UINavigationController {
-        let dataStore = WKWebsiteDataStore.nonPersistent()
+    static func makeNavigationController(session: WebPreparedSession, onClose: @escaping () -> Void, onContinue: (() -> Void)? = nil) -> UINavigationController {
+        let dataStore = session.isActivityEntry ? WKWebsiteDataStore.default() : WKWebsiteDataStore.nonPersistent()
         let controller = WebPageController(url: session.entry, session: session, dataStore: dataStore,
-                                           capabilities: WebDisabledCapabilities(), onClose: onClose)
+                                           capabilities: WebDisabledCapabilities(), onClose: onClose, onContinue: onContinue)
         let navigation = UINavigationController(rootViewController: controller)
         navigation.setNavigationBarHidden(true, animated: false)
         return navigation
@@ -30,6 +30,7 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
     private let dataStore: WKWebsiteDataStore
     private let capabilities: any WebOptionalCapabilities
     private let onClose: () -> Void
+    private let onContinue: (() -> Void)?
     private let showsNavigation: Bool
     private let suppliedConfiguration: WKWebViewConfiguration?
     private let loadsInitialPage: Bool
@@ -53,9 +54,9 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
     init(url: URL, session: WebPreparedSession, dataStore: WKWebsiteDataStore,
          capabilities: any WebOptionalCapabilities, onClose: @escaping () -> Void,
          showsNavigation: Bool = false, configuration: WKWebViewConfiguration? = nil,
-         loadsInitialPage: Bool = true) {
+         loadsInitialPage: Bool = true, onContinue: (() -> Void)? = nil) {
         self.initialURL = url; self.session = session; self.dataStore = dataStore
-        self.capabilities = capabilities; self.onClose = onClose
+        self.capabilities = capabilities; self.onClose = onClose; self.onContinue = onContinue
         self.showsNavigation = showsNavigation
         self.suppliedConfiguration = configuration
         self.loadsInitialPage = loadsInitialPage
@@ -71,7 +72,14 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
         if suppliedConfiguration == nil { configuration.websiteDataStore = dataStore }
         configuration.allowsInlineMediaPlayback = true
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        let identityBridge: WebActivityIdentityBridge?
+        if session.isActivityEntry, !showsNavigation, suppliedConfiguration == nil {
+            let bridge = WebActivityIdentityBridge(entry: session.entry)
+            configuration.userContentController.addScriptMessageHandler(bridge, contentWorld: .page, name: WebActivityIdentityBridge.name)
+            identityBridge = bridge
+        } else { identityBridge = nil }
         browser = WKWebView(frame: .zero, configuration: configuration)
+        identityBridge?.browser = browser
         browser.navigationDelegate = self
         browser.uiDelegate = self
         browser.setAllMediaPlaybackSuspended(true)
@@ -242,6 +250,7 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
     }
 
     private func showFailure(_ error: Error? = nil) {
+        guard readiness.phase != .failed else { return }
         requestTrace?.emit(.failure, error: error ?? WebIntegrationError.network)
         timer?.cancel(); completed = false
         contentCheck?.cancel()
@@ -282,6 +291,10 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
     private func execute(_ command: WebBridgeCommand) throws {
         switch command {
         case .ignored: return
+        case .continueNative:
+            guard session.isActivityEntry, committedURL?.host == initialURL.host else { throw WebIntegrationError.unsupported }
+            stop()
+            (onContinue ?? onClose)()
         case .endSession: closeAll()
         case .close: closePage()
         case .settings:
@@ -373,6 +386,15 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
             }
             return
         }
+        // The entry origin fence belongs to the activity root, not browser children or new windows.
+        if session.isActivityEntry, !showsNavigation, targetMainFrame != nil,
+           WebBrowserAddress.isWebURL(url), !session.environment.webPolicy.allows(url) {
+            decisionHandler(.cancel)
+            if userActivated, source != nil, session.environment.externalPolicy?.allows(url) == true {
+                UIApplication.shared.open(url)
+            }
+            return
+        }
         let route = WebLinkRouter(policy: session.environment.webPolicy).navigation(to: url,
             source: pageSource, sourceMainFrame: frame.mainFrame, targetMainFrame: targetMainFrame,
             userActivated: userActivated, active: activePage, initialDocument: initialURL)
@@ -390,24 +412,34 @@ final class WebPageController: UIViewController, WKNavigationDelegate, WKUIDeleg
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse, decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
-        if navigationResponse.isForMainFrame, let response = navigationResponse.response as? HTTPURLResponse {
+        let response = navigationResponse.response
+        let mainFrame = navigationResponse.isForMainFrame
+        let canShow = navigationResponse.canShowMIMEType
+        decisionHandler(navigationPolicy(for: response, mainFrame: mainFrame, canShowMIMEType: canShow))
+    }
+
+    func navigationPolicy(for response: URLResponse, mainFrame: Bool, canShowMIMEType: Bool) -> WKNavigationResponsePolicy {
+        if mainFrame, let response = response as? HTTPURLResponse {
             requestTrace?.emit(.response, httpStatus: response.statusCode)
         }
-        guard let url = navigationResponse.response.url,
+        guard let url = response.url,
               WebBrowserAddress.isWebURL(url) || url.absoluteString == IntegrationConstants.Route.blank,
-              navigationResponse.canShowMIMEType else {
-            decisionHandler(.cancel)
-            if navigationResponse.isForMainFrame { showFailure() }
-            return
+              canShowMIMEType else {
+            if mainFrame { showFailure() }
+            return .cancel
         }
-        if let response = navigationResponse.response as? HTTPURLResponse, !(200..<300).contains(response.statusCode) {
-            decisionHandler(.cancel)
-            if navigationResponse.isForMainFrame {
+        if session.isActivityEntry, !showsNavigation, mainFrame,
+           !session.environment.webPolicy.allows(url) {
+            showFailure(WebIntegrationError.addressDenied)
+            return .cancel
+        }
+        if let response = response as? HTTPURLResponse, !(200..<300).contains(response.statusCode) {
+            if mainFrame {
                 showFailure(WebTransportFailure(reason: .network, httpStatus: response.statusCode))
             }
-            return
+            return .cancel
         }
-        decisionHandler(.allow)
+        return .allow
     }
 
     private func beginLoading() {

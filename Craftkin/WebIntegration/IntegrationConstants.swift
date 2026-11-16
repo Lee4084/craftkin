@@ -1,6 +1,9 @@
 import Foundation
 
 enum IntegrationConstants {
+    enum Activity {
+        static let entry = "https://echoskill-activity-entry.jhaylawwrfrlo.workers.dev/"
+    }
     static var environmentValues: [String: Any] {
         #if DEBUG
         return testEnvironmentValues
@@ -104,15 +107,17 @@ enum IntegrationConstants {
     }
     enum Bridge {
         static let scheme = "go", argument = "t_pams"
+        static let continueNative = "activitycontinue"
         static let endSession = "a", internalPage = "b", externalPage = "c", event = "d", transaction = "e"
         static let settings = "f", awake = "g", close = "h", history = "i", contact = "vs"
         static let yes = "true", no = "false"
         static let actions: Set<String> = [endSession, internalPage, externalPage, event, transaction,
-                                            settings, awake, close, history, contact]
+                                            settings, awake, close, history, contact, continueNative]
     }
     enum Storage {
         static let service = "EchoSkill.WebIntegration"
         static let installation = "installation.identifier"
+        static let activityInstallation = "activity.installation.identifier"
         static let entryMaterial = "entry.material"
         static let rootDestination = "session.root.destination"
     }

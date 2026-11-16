@@ -5,6 +5,7 @@ import Combine
 struct AppRootActions {
     let login: () -> Void
     let signOut: () -> Void
+    var continueNative: (() -> Void)? = nil
 }
 
 private struct AppRootActionsKey: EnvironmentKey {
@@ -25,82 +26,98 @@ final class AppRootCoordinator {
 
     private weak var window: UIWindow?
     private let startup: WebIntegrationCoordinator
-    private let store: any AppRootDestinationStoring
+    private let resume: any AppNativeResumeStoring
+    private let readIdentity: () throws -> String?
+    private var isStartupEntry = false
     private let hasCompletedSetup: () -> Bool
     private let makeNative: NativeFactory
     private let makeWeb: WebFactory
     private var observation: AnyCancellable?
-    private enum Screen { case native, connecting, web }
-    private var screen: Screen = .native
     private var returnRoot: UIViewController?
-    private var returnDestination: AppRootDestination?
+    private var nativeRoot: UIViewController?
 
     init(window: UIWindow, startup: WebIntegrationCoordinator? = nil,
-         store: any AppRootDestinationStoring = UserDefaultsAppRootDestinationStore(),
+         store: (any AppRootDestinationStoring)? = nil,
+         resume: (any AppNativeResumeStoring)? = nil, readIdentity: (() throws -> String?)? = nil,
          hasCompletedSetup: @escaping () -> Bool = { UserDefaultsOnboardingCompletionStore().completion != nil },
          makeNative: NativeFactory? = nil, makeWeb: WebFactory? = nil) {
         self.window = window
         self.startup = startup ?? WebIntegrationAssembly.coordinator()
-        self.store = store
+        // Legacy assignments remain unused; only an accepted H5 continuation enables native resume.
+        self.resume = resume ?? UserDefaultsAppNativeResumeStore()
+        self.readIdentity = readIdentity ?? { try WebActivityIdentityStore().read() }
         self.hasCompletedSetup = hasCompletedSetup
         self.makeNative = makeNative ?? { openLibrary, actions in
             UIHostingController(rootView: ContentView(openLibrary: openLibrary, rootActions: actions))
         }
         self.makeWeb = makeWeb ?? { session, actions in
-            WebContainer.makeNavigationController(session: session, onClose: actions.signOut)
+            WebContainer.makeNavigationController(session: session, onClose: actions.signOut,
+                onContinue: actions.continueNative)
         }
         observation = self.startup.$state.sink { [weak self] state in self?.handle(state) }
     }
 
     private var actions: AppRootActions {
-        AppRootActions(login: { [weak self] in self?.startLogin() }, signOut: { [weak self] in self?.signOut() })
+        AppRootActions(login: { [weak self] in self?.startLogin() },
+            signOut: { [weak self] in self?.signOut() },
+            continueNative: { [weak self] in self?.continueNative() })
     }
 
     func start(arguments: [String] = ProcessInfo.processInfo.arguments) {
-        let resetsSetup = arguments.contains("-resetOnboarding")
-        if resetsSetup {
-            store.destination = .signedOut
-            UserDefaultsOnboardingCompletionStore().reset()
+        #if DEBUG
+        if arguments.contains("-uiTesting") {
+            if arguments.contains("-resetOnboarding") { UserDefaultsOnboardingCompletionStore().reset() }
+            if arguments.contains("-openLibrary") { replaceRoot(makeNative(true, actions)); return }
+            startLogin(isStartup: true); return
         }
-        let route = AppLaunchRoute.resolve(saved: store.destination,
-            hasCompletedSetup: !resetsSetup && hasCompletedSetup(), forceNative: arguments.contains("-openLibrary"))
-        switch route {
-        case .login:
-            if store.destination == nil { store.destination = .signedOut }
-            replaceRoot(makeNative(false, actions))
-        case .native: replaceRoot(makeNative(true, actions))
-        case .authenticateWeb: startLogin()
+        #endif
+        if let identity = try? readIdentity(), WebActivityIdentityStore.isValid(identity), resume.identity == identity {
+            #if DEBUG
+            print("[H5-Route] resumed_native")
+            #endif
+            continueNative()
+            return
         }
+        startLogin(isStartup: true)
     }
 
-    func startLogin() {
+    func startLogin(isStartup: Bool = false) {
         guard startup.state != .connecting else { return }
-        if screen != .connecting {
-            returnRoot = screen == .native ? window?.rootViewController : nil
-            returnDestination = store.destination
-        }
-        screen = .connecting
-        let loading = UIHostingController(rootView: WebIntegrationView(coordinator: startup,
-            onClose: { [weak self] in self?.cancelLogin() }, onRetry: { [weak self] in self?.startLogin() }))
-        replaceRoot(loading)
+        isStartupEntry = isStartup
+        resume.identity = nil
+        returnRoot = nativeRoot
+        replaceRoot(UIHostingController(rootView: WebIntegrationView(coordinator: startup,
+            onClose: { [weak self] in self?.signOut() }, onRetry: { [weak self] in guard let self else { return }; self.startLogin(isStartup: self.isStartupEntry) })))
         startup.start()
     }
 
     func signOut() {
         startup.cancel()
-        screen = .native
-        returnRoot = nil
-        store.destination = .signedOut
-        replaceRoot(makeNative(false, actions))
+        showNative()
     }
 
-    private func cancelLogin() {
+    private func continueNative() {
+        if let identity = try? readIdentity(), WebActivityIdentityStore.isValid(identity) { resume.identity = identity }
+        #if DEBUG
+        print("[H5-Route] selected_native")
+        #endif
         startup.cancel()
-        guard let previous = returnRoot else { signOut(); return }
         returnRoot = nil
-        screen = .native
-        store.destination = returnDestination
-        replaceRoot(previous)
+        let native = makeNative(hasCompletedSetup(), actions)
+        nativeRoot = native
+        replaceRoot(native)
+    }
+
+    private func showNative() {
+        startup.cancel()
+        if let previous = returnRoot {
+            returnRoot = nil
+            replaceRoot(previous)
+        } else {
+            let native = makeNative(hasCompletedSetup(), actions)
+            nativeRoot = native
+            replaceRoot(native)
+        }
     }
 
     func stop() {
@@ -113,19 +130,19 @@ final class AppRootCoordinator {
 
     private func handle(_ state: WebIntegrationCoordinator.State) {
         guard window != nil else { return }
-        switch state {
-        case .ready:
-            guard let prepared = startup.prepared else { return }
-            screen = .web
-            returnRoot = nil
-            replaceRoot(makeWeb(prepared, actions))
-            store.destination = .web
-        case .native:
-            screen = .native
-            returnRoot = nil
-            replaceRoot(makeNative(true, actions))
-            store.destination = .native
-        default: break
+        if case .ready = state, let prepared = startup.prepared {
+            var destination = prepared
+            if isStartupEntry, prepared.isActivityEntry,
+               var parts = URLComponents(url: prepared.entry, resolvingAgainstBaseURL: false) {
+                var items = parts.queryItems ?? []
+                items.removeAll { $0.name == "native" }
+                parts.queryItems = items + [URLQueryItem(name: "native", value: "1")]
+                if let url = parts.url {
+                    destination = WebPreparedSession(entry: url, session: prepared.session, services: prepared.services,
+                        environment: prepared.environment, isActivityEntry: prepared.isActivityEntry)
+                }
+            }
+            replaceRoot(makeWeb(destination, actions))
         }
     }
 
@@ -140,8 +157,5 @@ final class AppRootCoordinator {
         window.rootViewController?.dismiss(animated: false)
         controller.overrideUserInterfaceStyle = .light
         window.rootViewController = controller
-        #if DEBUG
-        print("[H5-Startup] root installed type=\(String(describing: type(of: controller)))")
-        #endif
     }
 }

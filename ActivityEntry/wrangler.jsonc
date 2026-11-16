@@ -1,0 +1,8 @@
+{
+  "name": "echoskill-activity-entry",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-13",
+  "workers_dev": true,
+  "keep_vars": true,
+  "observability": { "enabled": false }
+}

@@ -151,4 +151,5 @@ struct WebPreparedSession {
     let session: WebSession
     let services: WebRemoteServices
     let environment: WebEnvironment
+    var isActivityEntry: Bool = false
 }
