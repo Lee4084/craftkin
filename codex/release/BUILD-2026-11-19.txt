@@ -1,0 +1,30 @@
+EchoSkill App Store Connect 上传记录
+
+结果：成功上传，Codemagic 状态 finished。
+构建：https://codemagic.io/app/6afe93f4c31c756b90884177/build/6afea7bbd133a39c4a130932
+源码：Lee4084/craftkin main，提交 557eed2。
+工作流：ios-app-store-upload；Apple 集成 echoskill。
+
+Apple 发布日志确认：
+App name: EchoSkill
+Bundle identifier: com.echoskill.app
+Version: 1.0.0
+Version code: 1
+Min OS version: 15.6
+Distribution type: App Store
+Certificate expires: 2027-11-19T07:30:17.000+0000
+UPLOAD SUCCEEDED with no errors, 1 warning
+Delivery UUID: f357c8c0-7aa6-415b-b38d-818e9e294591
+No errors uploading Craftkin.ipa.
+
+App Store Connect 数字 App ID：6834354945。
+产物：Craftkin.ipa（21.56 MB）、Craftkin.app.dSYM.zip（2.71 MB）。
+构建环境：Xcode 26.4 / iOS 26.4 SDK。
+本次仅上传二进制；未自动提交 App Store 或 TestFlight 审核，未自动上线。
+Apple 接收上传成功不等于审核通过；后续处理及构建可见状态以 App Store Connect 为准。
+
+唯一上传提醒：SDK version issue，代码 90725。
+Apple 提示从 2027 年 4 月起后续上传要求 iOS 27 SDK 或更新版本（Xcode 27 或更新版本）。本次已上传成功，当前未因此阻断；后续应在要求生效前升级 CI SDK，并继续保留经验证的最低 iOS 15.6 配置。
+
+排错记录：第一次构建因首次上传没有历史构建号、返回空值而失败。已修复空值从构建号 1 开始；第二次成功。API 授权、App 匹配、签名、归档、导出和上传均通过。
+发布私钥保存在用户本机私有凭据目录和 Codemagic Secret，未写入 GitHub。使用说明见 CODEMAGIC.txt。

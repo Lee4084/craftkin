@@ -19,7 +19,7 @@ Codemagic 应用：https://codemagic.io/app/6afe93f4c31c756b90884177/settings
 
 前置条件：
 Apple Developer / App Store Connect 中应有对应 com.echoskill.app 的标识和 App 记录，echoskill 授权应有其读取、签名和上传权限。App 记录仍需通过 Apple 提供的管理入口创建；本工作流不会创建商店 App 记录。
-目前通过 Codemagic 的 Fetch profiles 验证 echoskill 授权可连接，尚无现成描述文件，由正式构建中的签名步骤处理。
+初次通过 Fetch profiles 验证 echoskill 授权可连接但没有现成描述文件；第二次正式云构建已成功获取并应用 App Store 分发签名。
 如果 Apple 账号存在证书配额或权限问题，构建将停止并报告错误，不自动撤销证书。
 
 本机验证：正式包名 Release 无签名编译通过，产物 com.echoskill.app、1.0.0 (1)、最低 iOS 15.6；日志 /tmp/craftkin-production-bundle-build.log。
@@ -33,3 +33,12 @@ https://docs.codemagic.io/yaml-publishing/app-store-connect/
 https://docs.codemagic.io/partials/code-signing-ios-configure-environment-vars/
 
 首次云构建：6afea6d2d133a39c4a1308eb（提交 6a7fe82）。Apple 授权有效，查询到正式 App 记录 6834354945；历史构建号为空，原脚本未处理首次上传，已修正为空值时从 1 开始。此次尚未生成签名资料或导出 IPA。
+
+发布完成（2026-11-19）：
+- Codemagic 第 2 次构建 6afea7bbd133a39c4a130932，源提交 557eed2，状态 finished。
+- Apple 明确返回 UPLOAD SUCCEEDED / No errors uploading，Delivery UUID f357c8c0-7aa6-415b-b38d-818e9e294591。
+- 上传包：EchoSkill，com.echoskill.app，1.0.0 (1)，最低 iOS 15.6，App Store 分发签名。
+- App Store Connect App ID：6834354945；分发证书到期日 2027-11-19。
+- 本次仅上传构建，未自动提交审核或发布。Apple 后续处理、加密合规和审核状态以 App Store Connect 为准。
+- Apple 返回 1 条 SDK 提醒（90725）：从 2027 年 4 月起，后续上传需使用 iOS 27 SDK / Xcode 27 或更新版本。本次 iOS 26.4 SDK 上传已成功，不属于上传错误；到期前应升级 CI 构建 SDK。构建 SDK 升级不等于把最低运行版本从 iOS 15.6 上调。
+详情：https://codemagic.io/app/6afe93f4c31c756b90884177/build/6afea7bbd133a39c4a130932
