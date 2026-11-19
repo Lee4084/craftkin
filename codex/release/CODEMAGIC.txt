@@ -31,3 +31,5 @@ Apple Developer / App Store Connect 中应有对应 com.echoskill.app 的标识�
 https://docs.codemagic.io/yaml-quick-start/building-a-native-ios-app/
 https://docs.codemagic.io/yaml-publishing/app-store-connect/
 https://docs.codemagic.io/partials/code-signing-ios-configure-environment-vars/
+
+首次云构建：6afea6d2d133a39c4a1308eb（提交 6a7fe82）。Apple 授权有效，查询到正式 App 记录 6834354945；历史构建号为空，原脚本未处理首次上传，已修正为空值时从 1 开始。此次尚未生成签名资料或导出 IPA。

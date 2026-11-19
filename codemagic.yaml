@@ -55,7 +55,7 @@ workflows:
             --platform IOS --pre-release-version "$ECHOSKILL_MARKETING_VERSION")
           next=$(python3 - "$latest" <<'PY'
           import sys
-          value = sys.argv[1].strip()
+          value = sys.argv[1].strip() or "0"
           if not value.isdecimal():
               raise SystemExit("Expected a numeric existing build number: " + repr(value))
           print(int(value) + 1)
