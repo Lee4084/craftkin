@@ -3,13 +3,12 @@ workflows:
     name: EchoSkill App Store Connect upload
     instance_type: mac_mini_m2
     max_build_duration: 60
+    integrations:
+      app_store_connect: echoskill
     environment:
-      xcode: latest
+      xcode: "26.4"
       groups:
-        - app_store_credentials
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.echoskill.app
+        - echoskill_signing
       vars:
         XCODE_PROJECT: Craftkin.xcodeproj
         XCODE_SCHEME: Craftkin
@@ -18,7 +17,7 @@ workflows:
       - name: Check publishing credentials and project identity
         script: |
           set -euo pipefail
-          : "${APP_STORE_APPLE_ID:?Set the App Store Connect application Apple ID}"
+          : "${CERTIFICATE_PRIVATE_KEY:?Configure the EchoSkill distribution certificate private key}"
           : "${APP_STORE_CONNECT_PRIVATE_KEY:?Set the App Store Connect API private key}"
           : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Set the App Store Connect API key ID}"
           : "${APP_STORE_CONNECT_ISSUER_ID:?Set the App Store Connect API issuer ID}"
@@ -31,6 +30,23 @@ workflows:
           assert settings["IPHONEOS_DEPLOYMENT_TARGET"] == "15.6", "Unexpected minimum iOS version"
           with open(os.environ["CM_ENV"], "a") as output:
               output.write("ECHOSKILL_MARKETING_VERSION=" + settings["MARKETING_VERSION"] + "\n")
+          PY
+      - name: Find the EchoSkill App Store Connect record
+        script: |
+          set -euo pipefail
+          app-store-connect apps list --bundle-id-identifier "$BUNDLE_ID" \
+            --strict-match-identifier --json > /tmp/echoskill-apps.json
+          python3 - <<'PY'
+          import json, os
+          response = json.load(open("/tmp/echoskill-apps.json"))
+          apps = response if isinstance(response, list) else response.get("data", [])
+          apps = [app for app in apps if app.get("attributes", app).get("bundleId") == os.environ["BUNDLE_ID"]]
+          if len(apps) != 1:
+              raise SystemExit("Create or grant access to the com.echoskill.app app record in App Store Connect before uploading.")
+          app_id = str(apps[0]["id"])
+          with open(os.environ["CM_ENV"], "a") as output:
+              output.write("APP_STORE_APPLE_ID=" + app_id + "\n")
+          print("EchoSkill App Store Connect application: " + app_id)
           PY
       - name: Select the next build number
         script: |
@@ -47,7 +63,13 @@ workflows:
           )
           agvtool new-version -all "$next"
       - name: Apply App Store distribution signing
-        script: xcode-project use-profiles
+        script: |
+          set -euo pipefail
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --platform IOS --type IOS_APP_STORE --strict-match-identifier --create
+          keychain add-certificates
+          xcode-project use-profiles
       - name: Archive and export the distribution IPA
         script: |
           set -euo pipefail
@@ -59,8 +81,6 @@ workflows:
       - /tmp/xcodebuild_logs/*.log
     publishing:
       app_store_connect:
-        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
-        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
-        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        auth: integration
         submit_to_testflight: false
         submit_to_app_store: false
