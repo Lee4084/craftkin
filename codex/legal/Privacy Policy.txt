@@ -1,0 +1,26 @@
+EchoSkill Privacy Policy
+Last updated: November 19, 2026
+EchoSkill is provided by George Elizabeth, at Alaska Anchorage 19141 Pine Ridge Circle. This policy explains how the current App and its legal website handle information. For privacy questions, contact EchoSkillContact@outlook.com.
+1 Your information on this device
+The App saves your profile, family labels, lesson text, selected photos and videos, learning progress, notes, and preferences locally to provide its library and learning features. It does not automatically upload your lesson library to us or synchronize it with other devices. Local invitation records do not send invitations or verify another person's account.
+2 Camera microphone and photos
+Camera and microphone access are used when you choose to record. The system photo picker gives the App the items you select, rather than unrestricted access to your photo library. You can decline access or change permissions in iOS Settings; related recording features may then be unavailable.
+Avatars are resized and re-encoded. Other imported or exported media may retain metadata, so review files before sharing. The App does not request Contacts access or precise location.
+3 Website and device storage
+Our legal pages are hosted by Cloudflare. Loading them shares your IP address and normal request information, such as browser details, with Cloudflare for delivery and security. Cloudflare may process information internationally under its Privacy Policy: https://www.cloudflare.com/privacypolicy/.
+The App uses persistent website storage: cookies and website data can remain after you close or restart it. Agreement acceptance is saved separately on your device. An installation identifier, when created, is stored in the iOS Keychain and may survive reinstallation. It is not Apple's advertising identifier.
+The current legal website does not run activity-registration, messaging, payment, advertising, or analytics scripts. New services will need appropriate disclosures before they are enabled.
+4 Sharing and other services
+You choose whether to export content and where to send it. The selected app or service receives those files under its own terms. Device backups may also contain local App data, depending on your Apple settings.
+We do not sell your personal information or automatically send your lesson content to advertising or remote AI services. We may disclose information we actually hold if required by law. We cannot access library files that remain only on your device.
+5 Retention deletion and security
+Local library records remain until you edit or delete them using the App's data controls, or remove the App's local data. Keep separate copies of important files. Deleting App copies does not delete originals in Photos, exports, or device backups.
+A library reset does not clear website storage or Keychain identifiers. Website data can remain until it expires or is removed, and Keychain records can survive App removal. Cloudflare's handling and retention are described in its linked policy. We retain support messages as needed to address your request and meet applicable legal obligations.
+The App uses iOS storage protections, but no storage or transmission is completely secure.
+6 Your choices and requests
+You can edit local information, export supported records, delete local library data, and manage permissions. Depending on applicable law, you may also request access, correction, deletion, or other privacy rights for information we hold, withdraw consent where processing relies on it, or complain to a privacy authority. Email EchoSkillContact@outlook.com; we may need to verify your request. We cannot remotely recover or erase files stored only on your device.
+7 Children and recordings of others
+The App is intended for general family use. Parents or guardians should supervise minors and provide any consent required by law. Obtain permission before recording or sharing another person's image, voice, or private information. Contact us if you believe a child's information has been provided to us without required authorization.
+8 Changes and contact
+We will update this policy when our practices change and provide notice or seek consent where required. An updated policy alone does not authorize unrelated new uses of your content.
+Contact: EchoSkillContact@outlook.com.

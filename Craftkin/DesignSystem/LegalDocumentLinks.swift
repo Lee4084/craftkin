@@ -1,21 +1,15 @@
 import SwiftUI
 
 struct LegalDocumentLinks: View {
+    @State private var selected: LegalDocument?
     var body: some View {
-        Group {
-            if let url = URL(string: IntegrationConstants.Legal.terms) {
-                Link(destination: url) {
-                    Text(IntegrationConstants.Text.terms).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                }
-                .accessibilityIdentifier(IntegrationConstants.Text.termsID)
+        ForEach(LegalDocument.allCases) { document in
+            Button { selected = document } label: {
+                Text(document.title).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             }
-            if let url = URL(string: IntegrationConstants.Legal.privacy) {
-                Link(destination: url) {
-                    Text(IntegrationConstants.Text.privacy).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                }
-                .accessibilityIdentifier(IntegrationConstants.Text.privacyID)
-            }
+            .accessibilityIdentifier(document == .terms ? "legal-terms-link" : "legal-privacy-link")
         }
         .tint(EchoTheme.sage)
+        .fullScreenCover(item: $selected) { LegalExternalBrowser(url: $0.url).ignoresSafeArea() }
     }
 }

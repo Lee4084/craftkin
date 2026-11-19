@@ -1,0 +1,17 @@
+删除 App 内置离线协议
+
+用户要求移除 Craftkin/Resources 下内置离线协议。
+删除 Resources/Legal 中的 index.html、terms.html、privacy.html、styles.css、consent.js；空 Resources/Legal 和 Resources 目录同时移除。
+LegalConsentView 删除本地 Bundle 资源查找、离线状态和 Read offline copy 入口，协议失败页只提示检查网络并保留 Retry。
+LegalConsentWebView、LegalConsentPageView 与 LegalConsentBridge 删除 offlineDirectory 参数、本地 file 加载、离线来源验证和离线响应处理。
+在线地址、H5 同意回调、协议 UserDefaults 和 Keychain 原有记录不变，固定 /start 入口不变。
+
+build_site.py 删除 sync_ios 和 --sync-ios 的离线同步能力，避免之后重新生成这些 App 资源；网站页面生成功能继续保留。
+Cloudflare 静态站和保留活动目录 public/ 不变，本次不执行网站部署。
+Xcode 使用文件系统同步组，不存在这些 HTML 的手工文件引用，无需改动工程配置。
+第 18 次保留清单中的 build_site.py 因删除离线同步有计划变化，其余活动源码文件保持原哈希。
+
+验证使用全新 /tmp/Craftkin-Online-Legal-DerivedData 目录构建，避免旧产物混入资源。未运行 App 或模拟器。
+
+Debug 通用 iOS 设备无签名编译通过。递归检查新 Craftkin.app 确认无上述 HTML/CSS/JS 文件和 Legal 资源目录。
+源码无离线协议状态、入口、参数或生成函数残留，保留清单中其余 16 项网站源码哈希一致；build_site.py 只移除了离线同步。git diff --check 通过。

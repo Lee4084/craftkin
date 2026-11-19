@@ -140,8 +140,9 @@ struct StepsEditorView: View {
                     .frame(width: 34, height: 34).background(EchoTheme.terracotta).clipShape(Circle())
                 VStack(alignment: .leading, spacing: 7) {
                     TextField("Step title", text: $coordinator.draft.steps[index].title)
-                        .font(.system(.headline, design: .serif, weight: .bold))
-                    TextField("Instruction", text: $coordinator.draft.steps[index].instruction, axis: .vertical)
+                        .font(.system(.headline, design: .serif).weight(.bold))
+                    CompatibleMultilineField("Instruction", text: $coordinator.draft.steps[index].instruction,
+                                             textStyle: .subheadline, color: UIColor(EchoTheme.secondaryInk))
                         .font(.subheadline).foregroundStyle(EchoTheme.secondaryInk)
                     Label("\(step.start.echoTimestamp) – \(step.end.echoTimestamp)", systemImage: "clock")
                         .font(.caption.weight(.semibold)).foregroundStyle(EchoTheme.secondaryInk)
@@ -177,8 +178,7 @@ struct CoverSharingView: View {
     @ObservedObject var coordinator: CaptureCoordinator
     private var covers: [String] {
         let current = RuntimePhotos.cover(coordinator.draft.selectedCover, title: coordinator.draft.title)
-        // Keep library-photo positions stable while selection changes. A retained
-        // legacy/custom cover may appear last, but never moves the photo choices.
+
         return RuntimePhotos.captureCovers.contains(current)
             ? RuntimePhotos.captureCovers : RuntimePhotos.captureCovers + [current]
     }
@@ -191,7 +191,7 @@ struct CoverSharingView: View {
             Text("Choose an illustrative cover photo and confirm exactly what family members can do. These library photos are not frames from your video.")
                 .foregroundStyle(EchoTheme.secondaryInk)
 
-            Text("Choose a cover").font(.system(.title3, design: .serif, weight: .bold))
+            Text("Choose a cover").font(.system(.title3, design: .serif).weight(.bold))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(covers, id: \.self) { cover in
@@ -209,7 +209,7 @@ struct CoverSharingView: View {
             }
 
             CaptureCard {
-                Text(coordinator.draft.title).font(.system(.title2, design: .serif, weight: .bold))
+                Text(coordinator.draft.title).font(.system(.title2, design: .serif).weight(.bold))
                 Label("Transcript approved", systemImage: "checkmark.circle.fill").foregroundStyle(EchoTheme.sage)
                 Label("Materials approved", systemImage: "checkmark.circle.fill").foregroundStyle(EchoTheme.sage)
                 Label("\(coordinator.draft.steps.count) steps approved", systemImage: "checkmark.circle.fill").foregroundStyle(EchoTheme.sage)
@@ -253,7 +253,7 @@ struct PublishSuccessView: View {
                 .font(.title3).foregroundStyle(EchoTheme.secondaryInk).multilineTextAlignment(.center)
             CaptureCard {
                 Image(coordinator.draft.selectedCover).resizable().scaledToFill().frame(height: 176).clipped().clipShape(RoundedRectangle(cornerRadius: 17))
-                Text(coordinator.draft.title).font(.system(.title2, design: .serif, weight: .bold))
+                Text(coordinator.draft.title).font(.system(.title2, design: .serif).weight(.bold))
                 Label("Shared with The Carter Family", systemImage: "lock.fill").foregroundStyle(EchoTheme.sage)
             }
             Button("View Lesson", action: onViewLesson).buttonStyle(EchoPrimaryButtonStyle())

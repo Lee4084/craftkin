@@ -65,4 +65,3 @@ final class OnboardingCoordinator: ObservableObject {
         step = .complete
     }
 }
-

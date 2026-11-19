@@ -1,0 +1,25 @@
+保留活动源码，发布纯静态协议
+
+后续修正：原生固定入口已按用户要求恢复为 /start?debug=1；当前状态以第 19 次记录为准。以下 /terms 原生入口描述属于中间状态。
+
+用户要求保留当前 H5 部署代码供以后开发活动，当前先发布静态协议 HTML。
+完整活动 H5 仍原样保留在 codex/legal/site/public/，含接口配置、身份获取、分流、加密链接、缓存、Token 和调试窗口。
+原 build_site.py、wrangler.jsonc 及原生网页交互模块保留。
+
+新增 build_static.py，从现有协议页面生成 static-public/；只包含 index、terms、privacy、404 HTML，styles.css、consent.js 和 Pages 两个配置文件。
+静态目录不含活动/启动/调试脚本、CryptoJS 或活动路由；CSP connect-src 为 none，站点资源 no-store。
+协议正文保持原样，底部固定 Agree and continue 与原生合法同意回调保留。
+旧 /start、/start.html 通过 302 跳到 /terms?consent=app，兼容现有安装包 URL。
+App 当前源码入口直接改为 https://craftkin.pages.dev/terms，同意版本和已存记录不改，已同意用户仍直接进入原生首页。
+不清理 Keychain、UserDefaults 或旧网站缓存，静态页面不读写活动入口。
+
+在 static/ 目录用该目录的 wrangler.jsonc 明确部署 ../static-public/ 到原 craftkin 项目，域名和现有协议地址不变。
+保留源码用于后续正常开发及版本发布，不提供提审后远程切换活动的机制。
+
+构建检查：文件清单、无活动脚本引用、协议正文与原版一致、固定按钮唯一性、资源版本和 consent.js 语法检查通过。
+
+发布成功：https://1d999ca4.craftkin.pages.dev，主域名 craftkin.pages.dev。
+原生入口改为 /terms 后，Debug 通用 iOS 设备无签名编译通过，未运行 App 或模拟器。
+17 个保留活动源码文件的 SHA-256 清单复核一致；本次静态发布未改动这些文件。清单在 PRESERVED_ACTIVITY_FILES.txt。
+线上静态 terms/privacy/CSS/consent.js 与本地文件一致；重新验证 /start 与 /start.html 均 302 到静态协议，活动/启动/调试脚本为 404。
+发布传播初期曾命中旧资源缓存，使用 no-cache 与新查询参数复核 CryptoJS 返回静态 404 页面，独立部署域名同样为 404；新静态页面响应 no-store 且不加载或执行旧脚本。

@@ -1,0 +1,66 @@
+workflows:
+  ios-app-store-upload:
+    name: EchoSkill App Store Connect upload
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      xcode: latest
+      groups:
+        - app_store_credentials
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.echoskill.app
+      vars:
+        XCODE_PROJECT: Craftkin.xcodeproj
+        XCODE_SCHEME: Craftkin
+        BUNDLE_ID: com.echoskill.app
+    scripts:
+      - name: Check publishing credentials and project identity
+        script: |
+          set -euo pipefail
+          : "${APP_STORE_APPLE_ID:?Set the App Store Connect application Apple ID}"
+          : "${APP_STORE_CONNECT_PRIVATE_KEY:?Set the App Store Connect API private key}"
+          : "${APP_STORE_CONNECT_KEY_IDENTIFIER:?Set the App Store Connect API key ID}"
+          : "${APP_STORE_CONNECT_ISSUER_ID:?Set the App Store Connect API issuer ID}"
+          xcodebuild -project "$XCODE_PROJECT" -scheme "$XCODE_SCHEME" \
+            -configuration Release -sdk iphoneos -showBuildSettings -json > /tmp/echoskill-settings.json
+          python3 - <<'PY'
+          import json, os
+          settings = next(item["buildSettings"] for item in json.load(open("/tmp/echoskill-settings.json")) if item["target"] == "Craftkin")
+          assert settings["PRODUCT_BUNDLE_IDENTIFIER"] == os.environ["BUNDLE_ID"], "Unexpected bundle identifier"
+          assert settings["IPHONEOS_DEPLOYMENT_TARGET"] == "15.6", "Unexpected minimum iOS version"
+          with open(os.environ["CM_ENV"], "a") as output:
+              output.write("ECHOSKILL_MARKETING_VERSION=" + settings["MARKETING_VERSION"] + "\n")
+          PY
+      - name: Select the next build number
+        script: |
+          set -euo pipefail
+          latest=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" \
+            --platform IOS --pre-release-version "$ECHOSKILL_MARKETING_VERSION")
+          next=$(python3 - "$latest" <<'PY'
+          import sys
+          value = sys.argv[1].strip()
+          if not value.isdecimal():
+              raise SystemExit("Expected a numeric existing build number: " + repr(value))
+          print(int(value) + 1)
+          PY
+          )
+          agvtool new-version -all "$next"
+      - name: Apply App Store distribution signing
+        script: xcode-project use-profiles
+      - name: Archive and export the distribution IPA
+        script: |
+          set -euo pipefail
+          xcode-project build-ipa --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME" --config Release
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/xcarchive/*.xcarchive/dSYMs/*.dSYM
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: false
+        submit_to_app_store: false

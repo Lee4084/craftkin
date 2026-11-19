@@ -64,7 +64,7 @@ private struct CaptureLessonPreview: View {
                                                             store: InMemoryLearningProgressStore()))
     }
     var body: some View {
-        NavigationStack {
+        CompatibleNavigation {
             LearnRootView(coordinator: learner)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
                 .navigationTitle("Lesson Preview").navigationBarTitleDisplayMode(.inline)
@@ -82,7 +82,7 @@ struct CaptureHeader: View {
             if let backTitle {
                 LibraryBackButton(title: backTitle, action: onBack)
             } else {
-                Text("EchoSkill").font(.system(.title2, design: .serif, weight: .bold)).foregroundStyle(EchoTheme.terracotta)
+                Text("EchoSkill").font(.system(.title2, design: .serif).weight(.bold)).foregroundStyle(EchoTheme.terracotta)
             }
             Spacer()
             Text(title).font(.subheadline.weight(.semibold)).foregroundStyle(EchoTheme.secondaryInk)

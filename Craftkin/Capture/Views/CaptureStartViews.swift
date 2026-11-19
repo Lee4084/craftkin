@@ -1,15 +1,13 @@
-import PhotosUI
 import SwiftUI
 import AVFoundation
 
 struct CaptureEntryView: View {
     @ObservedObject var coordinator: CaptureCoordinator
-    @State private var pickedVideo: PhotosPickerItem?
     @State private var showsCamera = false
     @State private var importing = false
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
                 CaptureHeader(title: "Capture")
                 EchoEyebrow(text: "A voice worth keeping")
@@ -33,17 +31,16 @@ struct CaptureEntryView: View {
                     }
 
                 Button {
-                    if ProcessInfo.processInfo.arguments.contains("-uiTesting") {
-                        coordinator.startRecording()
-                    } else {
-                        Task { await openCamera() }
-                    }
+                    Task { await openCamera() }
                 } label: {
                     Label("Record Now", systemImage: "video.fill")
                 }
                 .buttonStyle(EchoPrimaryButtonStyle())
 
-                PhotosPicker(selection: $pickedVideo, matching: .videos) {
+                PhotoLibraryButton(kind: .videos, isLoading: $importing, onPick: { media in
+                    guard case .video(let url) = media else { throw LocalMediaError.unsupportedType }
+                    await retainVideo(url)
+                }, onError: { coordinator.validationMessage = $0.localizedDescription }) {
                     Label("Import a Video", systemImage: "square.and.arrow.down")
                         .font(.headline).foregroundStyle(EchoTheme.terracotta)
                         .frame(maxWidth: .infinity).frame(minHeight: 54)
@@ -52,24 +49,8 @@ struct CaptureEntryView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
                 .accessibilityLabel("Import a Video")
-                .onChange(of: pickedVideo) { _, selection in
-                    guard let selection else { return }
-                    Task {
-                        importing = true
-                        defer { importing = false; pickedVideo = nil }
-                        do {
-                            guard let movie = try await selection.loadTransferable(type: ImportedVideo.self) else { throw LocalMediaError.unsupportedType }
-                            defer { try? FileManager.default.removeItem(at: movie.url) }
-                            await retainVideo(movie.url)
-                        } catch { coordinator.validationMessage = error.localizedDescription }
-                    }
-                }
                 .disabled(importing)
                 if importing { ProgressView("Saving your video…") }
-                #if targetEnvironment(simulator)
-                Button("Try with Example Content") { coordinator.importSampleVideo() }
-                    .font(.subheadline).frame(minHeight: 44)
-                #endif
 
                 if coordinator.hasSavedDraft {
                     CaptureCard {
@@ -79,7 +60,7 @@ struct CaptureEntryView: View {
                             Text(coordinator.draft.sourceDuration.echoTimestamp).font(.caption.monospacedDigit())
                         }
                         Text(coordinator.draft.title.isEmpty ? "Untitled family skill" : coordinator.draft.title)
-                            .font(.system(.title3, design: .serif, weight: .bold))
+                            .font(.system(.title3, design: .serif).weight(.bold))
                         Text("Your latest private draft is safely stored on this device.")
                             .foregroundStyle(EchoTheme.secondaryInk)
                         Button("Continue Draft") { coordinator.continueDraft() }
@@ -96,7 +77,6 @@ struct CaptureEntryView: View {
             }
             .padding(.horizontal, 20).padding(.top, 6).padding(.bottom, 28)
         }
-        .scrollIndicators(.hidden)
         .fullScreenCover(isPresented: $showsCamera) {
             CameraVideoPicker(maximumDuration: 600, onVideo: { url in
                 showsCamera = false
@@ -108,7 +88,12 @@ struct CaptureEntryView: View {
     private func retainVideo(_ url: URL) async {
         do {
             let imported = try await LocalVideoImporter.retain(url, maximumDuration: 600)
+            if Task.isCancelled {
+                try? LocalMediaStore().delete(imported.filename)
+                throw CancellationError()
+            }
             coordinator.importSource(filename: imported.filename, duration: imported.duration)
+        } catch is CancellationError {
         } catch { coordinator.validationMessage = error.localizedDescription }
     }
 

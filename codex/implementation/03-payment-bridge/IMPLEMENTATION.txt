@@ -1,0 +1,31 @@
+历史记录：用户后续要求移除额外限制并改用全屏模态，当前实现以 ../04-payment-present/IMPLEMENTATION.txt 为准。
+
+Craftkin 第三方支付原生交互修复
+
+用户现象：点击第三方支付没有反应。
+
+已确认的代码问题
+1. 实际 /h5_web/xttest/ cv=2 公共活动包把 OpenAppBrowser/OpenLink/Token/newTppClose 通过隐藏的 __jsbridge_iframe__ 发为 go://b、c、Token、h。原生原先要求 sourceFrame.isMainFrame 且目标不是子框架，导致这些调用被静默丢弃。
+2. go://c 的 https/http/mailto/tel 四选一限制是本项目先前自行添加，不是模板文档要求。示例 LFWebController 的 OpenLink 直接调用 UIApplication.shared.open；该限制会拒绝 alipays/weixin/银行 App 等 scheme。
+3. 原生子页按最初 host 校验后续文档，支付网关跨域重定向被取消；活动根页用 JS 触发的跨域跳转及新窗口也可能被静默取消。
+
+修复
+- 用源 WKFrameInfo.securityOrigin 与当前已提交文档的协议/host/端口比对，允许同源隐藏 iframe 发出 go 指令；不把不受信任 iframe 当作活动主页面。
+- 活动根页、内嵌浏览子页区分导航角色。支付子页可继续跟随 HTTP(S) 网关重定向；活动主页面保留，第三方页面放入独立子页。新窗口携带可用的原始 URLRequest，以保留原请求方法/参数。
+- OpenLink 和支付页面的 App scheme 跳转交给 UIApplication.open；不再限定四种 scheme。阻止 file/javascript/data/about/blob/go/app-settings/prefs/itms-services/applewebdata/intent 等不适合此入口的协议及带 URL 用户凭据的地址。没有引入 canOpenURL，也不因这次调用添加 LSApplicationQueriesSchemes。
+- 第三方浏览子页只允许链接、关闭、返回手势和唤醒控制；不能通过 Token/客服/设置等操作修改活动会话。协议同意仍由独立的 legalConsent 消息校验。
+- 可识别指令解析失败会提示；未接入的可选统计上报继续忽略，避免第三方支付完成后的统计指令被误显示为支付失败。
+- 所有变化在原生代码；网页分流、H5 会话和 Cloudflare 当前部署不需要更新。支付成功仍由现有业务后台/H5 判定，没有根据打开链接成功伪造支付成功。
+
+证据与验证
+公共页面：https://test-h5.tipobox.cc/h5_web/xttest/
+检查的公共脚本：assets/index-CTfvr_6C.js，SHA256 d132baac7d750df5be6d59197b61a79cb28fd90770f419c6f92da86471d43db8。
+从该脚本抽取真实 URL 桥接函数，在本机隔离 JS 环境用合成链接运行，验证 b/c/h/Token 均通过隐藏 iframe，参数保持原样；没有调用订单接口或支付网关。日志 payment-h5-contract.log。
+27 项 Swift 宿主测试通过，包含 iframe 同源/跨源、网关跳转、新窗口分流、支付 App 链接、危险协议、第三方页面权限及可选统计。iOS build-for-testing 编译通过。没有启动模拟器、安装或运行 App；未实际创建订单或进行交易。
+重新编译安装 App 后，仍需手机验证具体支付渠道的完整链路及返回活动页。HTTP 200 或逻辑测试不能证明真实支付已完成。
+
+参考
+模板 /Users/dncm/Desktop/jacket-package/大容/baseh5_04/Emotter/LFWebTools/LFWebController.swift。
+https://developer.apple.com/documentation/webkit/wkframeinfo/securityorigin
+https://developer.apple.com/documentation/uikit/uiapplication/canopenurl(_:)
+https://developer.apple.com/documentation/uikit/uiapplication/open(_:options:completionhandler:)

@@ -1,0 +1,17 @@
+Craftkin iOS 注释、日志、调试及测试清理
+
+用户要求：iOS 所有注释、log、debug 删除，test 代码也删除。
+
+已执行
+- 用 Xcode 自带 SwiftParser / SwiftSyntax 识别并移除 Swift 注释，逐 token 检查注释清理不改变代码或 URL 字符串；删除 DEBUG 分支和 #Preview。清理后再运行解析器，注释、DEBUG、日志和预览清理均为零新增变化。
+- 删除启动时日志、测试启动参数、强制页面跳转、测试数据重置、测试用媒体选择及模拟器示例入口；正常手机入口按原先不带参数的行为运行。
+- 删除 CraftkinTests、CraftkinUITests，以及 Xcode 的测试产品、测试 Target、构建阶段、测试配置、依赖及分组引用。工程只剩 Craftkin App Target。
+- 删除仓库中的 H5 .test.cjs 测试脚本、旧 verification 辅助校验脚本和历史 .log 文件。
+- 删除四个只供已删除测试使用的 InMemory 存储替身，以及设置页的测试通知按钮与发送逻辑。正常草稿预览使用的内存学习存储继续属于业务功能。
+- 清理内置 H5/CSS 注释和工程文件注释；源码中的协议 URL、Keychain service/account 及 App Bundle ID/签名/最低系统版本/版本号已核对。
+- 保留 Xcode Debug / Release 两个正常构建配置；删除的是调试代码与测试目标。测试接口域名、包参数按此前明确要求保留，不把接口名中的 test 误当作测试代码删除。
+
+当前验证
+Debug 与 Release App 编译均已通过。未启动模拟器或安装/运行 App。
+清理前备份在 /tmp/Craftkin-iOS-Before-Cleanup；清理工具和编译输出仅在 /tmp，不作为 iOS 源码或项目日志提交。没有 Git 提交或推送，Cloudflare 线上页面没有更改。
+历史 implementation 目录保留为历史；最新原生源码快照已更新，旧测试次数或旧日志路径不代表当前仓库还保留测试。

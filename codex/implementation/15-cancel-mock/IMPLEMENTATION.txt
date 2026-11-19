@@ -1,0 +1,12 @@
+取消 Mock，恢复真实接口调试
+
+用户确认接口可调试，要求取消 Mock。
+已撤回 LegalDocument 的临时 Bundle 入口配置及 Mock 域名/页面路径放行。
+已撤回 Debug/Release LEGAL_STARTUP_URL 构建设置及 Info.plist 的 LegalStartupURL 字段。
+AppEntryView 恢复正常读取和写入原有同意记录；不绕过已有同意、不使用模拟会话。
+App 启动 URL 恢复 https://craftkin.pages.dev/start?debug=1，consent=app 仍由既有桥接自动附加。
+删除 codex/legal/site/dev 下本次新增的 Mock 代码；原有线上 H5、真实接口流程和可展开请求详情保持原样。
+未删除或修改 Keychain、UserDefaults 已有记录及活动缓存。12 至 14 次记录仅作为已撤回方案留档。
+
+已关闭本地 Mock 服务。独立测试站主域将以 302 跳转回真实调试入口，Cloudflare 项目本身保留，未删除历史部署。
+Debug 通用 iOS 设备无签名编译通过；产物 Info.plist 无临时 LegalStartupURL 字段。源代码无 Mock 入口、构建设置/Info.plist 校验与 git diff --check 通过。没有运行或安装 App。

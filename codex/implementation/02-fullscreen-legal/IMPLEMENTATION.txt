@@ -1,0 +1,10 @@
+Craftkin 协议与活动统一铺满屏幕
+
+用户要求：Agree and continue 在 H5；协议与活动页面不再分别判断尺寸，都铺满。
+
+- LegalConsentView 全容器忽略系统安全区，无条件隐藏状态栏；启动加载、在线/离线协议、活动根页及子页使用同样的全屏容器。
+- WebView 不再按页面类型区分滚动 inset，统一 .never 和 zero；媒体配置依旧按活动需求启用，不改变活动/协议业务分流。
+- 协议 HTML viewport 增加 viewport-fit=cover；网页页头用自身 safe-area-inset-top 保护文字，背景和网页容器仍延伸到屏幕边缘。H5 底部真实同意按钮保持原实现，由原生校验回调后保存同意结果。
+- 已同步离线 HTML/CSS；网页版本更新为 craftkin-fullscreen-2。
+
+验证：43 项 H5 检查通过，iOS build-for-testing 编译通过；没有启动模拟器或运行 App。Cloudflare 已发布 https://74a01fa0.craftkin.pages.dev；稳定入口 https://craftkin.pages.dev/start?consent=app 。原生全屏变化需要重新编译安装 App。

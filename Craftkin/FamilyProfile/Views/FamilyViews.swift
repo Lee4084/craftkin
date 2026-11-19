@@ -213,7 +213,7 @@ struct MakerArchiveView: View {
             .frame(height: 86)
             Text(title)
                 .font(.caption.bold())
-                .lineLimit(2, reservesSpace: true)
+                .compatibleLineLimit(2, reservesSpace: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(8)
         }

@@ -1,0 +1,22 @@
+Craftkin 按示例放行活动导航，并弹出独立第三方支付页面
+
+用户最新要求优先于第 03 次实现：文档未要求的来源、域名、scheme 等限制移除；第三方支付用 present 式独立页面承接。
+
+当前跳转
+- go://b：t_pams 只做 Foundation URL 解析，创建原始 URLRequest，增加第三方网页页面。根视图通过 SwiftUI fullScreenCover 全屏弹出 LegalConsentPaymentView，WebView 承接 URL。支付页可以关闭，回到原活动；go://h 也可关闭子页。活动入口和保留的启动 H5 继续在背后，供 Token 更新及缓存回写。
+- go://c：t_pams 解析为 URL 后直接 UIApplication.shared.open(url, options: [:], completionHandler: nil)，与给定模板一致。没有固定 scheme 白名单/黑名单，也不因系统打开失败另加原生错误弹窗。
+- 普通 HTTP/HTTPS 导航：在当前 WebView 正常加载，包括跨域重定向；新窗口交给独立网页容器。其他 scheme 交系统打开。没有 WebView 层的来源、域名、端口、用户凭据或 MIME/HTTP 状态拦截。
+- 隐藏 iframe 的 go 指令正常分发，不要求来源必须主框架或同源；第三方子页不再增加指令能力白名单。未知指令和未接入的可选统计按模板忽略。保留在背后的活动页同样可以继续发 Token/关闭/链接指令，不以“必须当前最顶层页面”为条件拦截。
+- 移除自行增加的 12 页上限、go URL 长度上限与额外 query/envelope 条件；读取第一项 t_pams，与示例一致。
+
+启动弹窗
+原实现遇到初始化空白 iframe 或自加校验拒绝时，可能进入外部打开/错误提示路径。about:blank 现在直接留给 WebKit，不调用 UIApplication.open；自行添加的链接失败/不支持指令提示已去掉。未运行用户手机，不能据此断言用户先前每一次弹窗都是同一个触发原因。
+
+呈现实现
+LegalConsentView 只展示活动根页；第三方子页放入 fullScreenCover 的 LegalConsentPaymentView。关闭模态页只清除子页，不清除根页/源 H5。模态呈现时不会因为根视图 onDisappear 清空活动会话。支付内容仍铺满屏幕，右上角仅保留一个 Close 按钮，便于第三方网页没有 go://h 时退出。
+
+验证
+25 项 Swift 宿主逻辑测试通过，包含任意 Foundation URL 转交、跨域/端口/iframe Web 导航、新窗口、空白 iframe 不唤起系统、未知统计不弹错及原有协议/Token/Keychain 逻辑。iOS build-for-testing 编译通过。没有运行模拟器、安装 App 或创建真实订单；present/dismiss 和实际支付需用户更新 App 后在手机上验收。
+Cloudflare/H5 分流脚本没有改动，不需要重新发布网站。
+
+第 03 次目录为历史记录，其来源/协议/第三方能力限制已被本次替换。最新完整原生源码仍汇总于第 01 次目录 NATIVE_CODE_REVIEW.txt。

@@ -1,0 +1,29 @@
+Original commit: 5c76c0d1ee2446e265fe0e9b43906af28b14edfd
+Craftkin/WebIntegration/WebSecureStore.swift
+Craftkin/WebIntegration/WebEnvironment.swift
+Craftkin/WebIntegration/AppNativeResumeStore.swift
+Craftkin/WebIntegration/IntegrationConstants.swift
+Craftkin/WebIntegration/WebActivityIdentity.swift
+Craftkin/WebIntegration/ScreenPrivacyController.swift
+Craftkin/WebIntegration/WebIntegrationCoordinator.swift
+Craftkin/WebIntegration/WebBridge.swift
+Craftkin/WebIntegration/WebIdentityService.swift
+Craftkin/WebIntegration/AppRootDestinationStore.swift
+Craftkin/WebIntegration/WebStartupService.swift
+Craftkin/WebIntegration/WebRequestTrace.swift
+Craftkin/WebIntegration/WebConfigurationService.swift
+Craftkin/WebIntegration/WebTransport.swift
+Craftkin/WebIntegration/WebEntryBuilder.swift
+Craftkin/WebIntegration/WebIntegrationView.swift
+Craftkin/WebIntegration/WebPageReadiness.swift
+Craftkin/WebIntegration/WebServiceDirectory.swift
+Craftkin/WebIntegration/WebIntegrationAssembly.swift
+Craftkin/WebIntegration/WebDiagnostics.swift
+Craftkin/WebIntegration/WebAPIClient.swift
+Craftkin/WebIntegration/WebActivityEntryService.swift
+Craftkin/WebIntegration/AppRootCoordinator.swift
+Craftkin/WebIntegration/WebIdleTimerState.swift
+Craftkin/WebIntegration/ScreenPrivacyState.swift
+Craftkin/WebIntegration/WebContainer.swift
+Craftkin/WebIntegration/WebCompatibilityCodec.swift
+ActivityEntry/ (old Worker and tests)

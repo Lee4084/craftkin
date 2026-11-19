@@ -9,7 +9,7 @@ struct SkillDetailView: View {
     @State private var showsActions = false
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     LibraryBackButton(title: coordinator.backTitle, action: coordinator.goBack)
@@ -41,7 +41,7 @@ struct SkillDetailView: View {
                         HStack(spacing: 10) {
                             MakerAvatar(maker: skill.maker, size: 50)
                             VStack(alignment: .leading) {
-                                Text("Taught by \(skill.maker.relation)").font(.system(.headline, design: .serif, weight: .bold))
+                                Text("Taught by \(skill.maker.relation)").font(.system(.headline, design: .serif).weight(.bold))
                                 Text(skill.maker.name).font(.caption).foregroundStyle(EchoTheme.secondaryInk)
                             }
                         }
@@ -98,7 +98,7 @@ struct SkillDetailView: View {
                 HStack(spacing: 12) {
                     MakerAvatar(maker: skill.maker, size: 52)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("\(skill.maker.relation)’s Note").font(.system(.headline, design: .serif, weight: .bold))
+                        Text("\(skill.maker.relation)’s Note").font(.system(.headline, design: .serif).weight(.bold))
                         Text("“\(skill.transcript)”").font(.system(.body, design: .serif)).italic()
                     }
                 }
@@ -106,7 +106,6 @@ struct SkillDetailView: View {
             }
             .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 28)
         }
-        .scrollIndicators(.hidden)
         .confirmationDialog("Lesson actions", isPresented: $showsActions, titleVisibility: .visible) {
             Button("Continue Learning") { onContinueLearning(skill) }
             Button("Ask About This Skill") { onAskQuestion(skill) }
@@ -126,7 +125,7 @@ struct MakerProfileView: View {
     private var makerSkills: [SkillLesson] { coordinator.skills(for: maker) }
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
                 HStack {
                     LibraryBackButton(title: coordinator.backTitle, action: coordinator.goBack)
@@ -138,11 +137,12 @@ struct MakerProfileView: View {
                 .contentShape(Rectangle())
                 .zIndex(2)
 
-                ViewThatFits(in: .horizontal) {
+                CompatibleAdaptiveLayout {
                     HStack(alignment: .center, spacing: 18) {
                         MakerAvatar(maker: maker, size: 142)
                         makerIdentity
                     }
+                } vertical: {
                     VStack(alignment: .leading, spacing: 12) {
                         MakerAvatar(maker: maker, size: 130)
                         makerIdentity
@@ -190,9 +190,8 @@ struct MakerProfileView: View {
             }
             .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 28)
         }
-        .scrollIndicators(.hidden)
         .sheet(isPresented: $showsMemoryEditor) {
-            NavigationStack {
+            CompatibleNavigation {
                 Form {
                     TextEditor(text: $memory).frame(minHeight: 160).accessibilityLabel("Family memory")
                     Text("\(memory.count)/2000").font(.caption)
@@ -225,7 +224,7 @@ private struct Statistic: View {
 
     var body: some View {
         VStack(spacing: 4) {
-            Text(value).font(.system(.title, design: .serif, weight: .bold))
+            Text(value).font(.system(.title, design: .serif).weight(.bold))
             Text(label).font(.caption).foregroundStyle(EchoTheme.secondaryInk).multilineTextAlignment(.center)
         }.frame(maxWidth: .infinity)
     }

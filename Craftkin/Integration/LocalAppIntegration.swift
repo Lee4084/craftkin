@@ -35,20 +35,6 @@ final class UserDefaultsPublishedLessonStore: PublishedLessonStoring {
     }
 }
 
-final class InMemoryPublishedLessonStore: PublishedLessonStoring {
-    private var drafts: [CaptureDraft]
-    init(drafts: [CaptureDraft] = []) { self.drafts = drafts }
-    func load() throws -> [CaptureDraft] { drafts }
-    func upsert(_ draft: CaptureDraft) throws {
-        if let index = drafts.firstIndex(where: { $0.id == draft.id }) {
-            drafts[index] = draft
-        } else {
-            drafts.append(draft)
-        }
-    }
-    func deleteAll() throws { drafts = [] }
-}
-
 struct IntegratedSkillRepository: SkillRepository {
     let skills: [SkillLesson]
     let makers: [FamilyMaker]

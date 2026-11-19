@@ -26,3 +26,7 @@ build/
 *.pem
 *.key
 *.mobileprovision
+
+# Cloudflare local state and verification logs
+.wrangler/
+codex/verification/*.log

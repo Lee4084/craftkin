@@ -1,0 +1,9 @@
+Craftkin 支付大屏卡片与导航关闭按钮
+
+按用户最新要求，支付模态只提供 large detent，打开即大屏卡片，不再提供 medium。隐藏拖动条并 interactiveDismissDisabled(true)，不允许下拉手势关闭。
+关闭按钮由浮动圆形按钮改到 NavigationStack 的顶部导航栏右侧。网页在导航栏下方显示，活动根页继续保持原有铺满布局。关闭后回到下面的活动页面。
+本次沿用非全屏 sheet，不采用支付 fullScreenCover，也不改变 H5 指令和接口处理。
+
+检查：iOS build-for-testing 编译；没有运行 App 或模拟器。用户需重新安装后在手机上确认卡片尺寸、导航按钮和手势效果。网站无需更新。
+
+命名更新：弹出容器按用户要求由 LegalConsentPaymentView 更名为 presentPrivacyAndTerms；文件名和调用引用同步更新，显示与交互不变。

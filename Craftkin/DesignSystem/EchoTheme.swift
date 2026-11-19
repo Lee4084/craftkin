@@ -16,7 +16,7 @@ enum EchoTheme {
         .system(size: size, weight: .bold, design: .serif)
     }
 
-    static let eyebrow = Font.system(.caption, design: .rounded, weight: .bold)
+    static let eyebrow = Font.system(.caption, design: .rounded).weight(.bold)
 }
 
 extension Color {
@@ -87,7 +87,7 @@ struct EchoScreen<Content: View>: View {
         ZStack {
             EchoTheme.ivory.ignoresSafeArea()
 
-            ScrollView {
+            CompatibleKeyboardScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     if showsBackButton {
                         Button(action: onBack) {
@@ -104,7 +104,6 @@ struct EchoScreen<Content: View>: View {
                 .padding(.top, 6)
                 .padding(.bottom, 30)
             }
-            .scrollDismissesKeyboard(.interactively)
         }
         .tint(EchoTheme.terracotta)
     }

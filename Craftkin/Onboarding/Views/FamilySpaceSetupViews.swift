@@ -36,7 +36,7 @@ struct CreateFamilySpaceView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Family Space name")
-                    .font(.system(.headline, design: .serif, weight: .bold))
+                    .font(.system(.headline, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
 
                 TextField("The Carter Family", text: $familyName)
@@ -67,7 +67,7 @@ struct CreateFamilySpaceView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Your role")
-                    .font(.system(.title3, design: .serif, weight: .bold))
+                    .font(.system(.title3, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
 
                 Label("You’ll be the Organizer", systemImage: "checkmark.circle.fill")
@@ -84,7 +84,7 @@ struct CreateFamilySpaceView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 Text("Your Family Space")
-                    .font(.system(.title3, design: .serif, weight: .bold))
+                    .font(.system(.title3, design: .serif).weight(.bold))
 
                 HStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.fill")
@@ -99,7 +99,7 @@ struct CreateFamilySpaceView: View {
                 }
 
                 Text(previewName)
-                    .font(.system(.title3, design: .serif, weight: .bold))
+                    .font(.system(.title3, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
                     .lineLimit(2)
                 Label("1 member  ·  Private", systemImage: "lock.fill")
@@ -129,7 +129,7 @@ struct CreateFamilySpaceView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
         }
-        .onChange(of: familyName) { _, _ in validationMessage = nil }
+        .onChange(of: familyName) { _ in validationMessage = nil }
     }
 }
 
@@ -162,7 +162,7 @@ struct JoinFamilySpaceView: View {
 
             VStack(alignment: .leading, spacing: 9) {
                 Text("Invitation code")
-                    .font(.system(.headline, design: .serif, weight: .bold))
+                    .font(.system(.headline, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
 
                 InviteCodeField(code: $rawCode, focus: $focus)
@@ -208,7 +208,7 @@ struct JoinFamilySpaceView: View {
                 .foregroundStyle(EchoTheme.secondaryInk)
                 .frame(maxWidth: .infinity)
         }
-        .onChange(of: rawCode) { _, newValue in
+        .onChange(of: rawCode) { newValue in
             let filtered = String(
                 newValue
                     .filter { $0.isASCII && $0.isLetter || $0.isASCII && $0.isNumber }
@@ -237,7 +237,7 @@ private struct InviteCodeField: View {
             HStack(spacing: 8) {
                 ForEach(0..<6, id: \.self) { index in
                     Text(character(at: index))
-                        .font(.system(.title2, design: .monospaced, weight: .bold))
+                        .font(.system(.title2, design: .monospaced).weight(.bold))
                         .foregroundStyle(EchoTheme.ink)
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .background(EchoTheme.paper)
@@ -280,7 +280,7 @@ private struct InvitationPreviewCard: View {
             VStack(alignment: .leading, spacing: 7) {
                 EchoEyebrow(text: invitation == nil ? "Invitation preview" : "You've been invited to")
                 Text(invitation?.familyName ?? "Your family appears here")
-                    .font(.system(.title2, design: .serif, weight: .bold))
+                    .font(.system(.title2, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
                     .lineLimit(2)
                 Text(invitation.map { "\($0.memberCount) members  ·  \($0.skillCount) skills" } ?? "Enter a valid code to review the private space.")

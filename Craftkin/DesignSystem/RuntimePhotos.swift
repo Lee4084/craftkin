@@ -1,6 +1,5 @@
 import Foundation
 
-/// Display-only resolution of shipped sample artwork. Never rewrites stored media or custom asset choices.
 enum RuntimePhotos {
     private static let legacyNames: Set<String> = ["EchoHero", "EchoHome", "EchoReview", "EchoPrivacy", "EchoWoodwork"]
 
@@ -31,7 +30,7 @@ enum RuntimePhotos {
         if title.contains("bike") || title.contains("bicycle") { return "SkillBikeRepair" }
         if title.contains("woodwork") { return "SkillWoodwork" }
         if title.contains("garden") { return "SkillGardening" }
-        // Dumpling and pasta photographs are still awaited; other unknown choices stay unchanged.
+
         return asset
     }
 }

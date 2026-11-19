@@ -1,0 +1,69 @@
+Craftkin iOS 15.6 兼容改造
+日期：2026-11-19
+
+实现结果
+App target 与 project 层的 Debug/Release 四处最低系统版本统一为 iOS 15.6。
+修改 19 个现有 Swift 文件和 1 个工程文件，新增 3 个系统兼容封装文件。
+使用系统框架实现，不新增原生第三方依赖。
+
+新增文件
+Craftkin/DesignSystem/CompatibilityViews.swift
+- iOS 16+ 保留 NavigationStack，iOS 15.6 使用单列 NavigationView。
+- 旧系统空状态由图标、标题和说明组成，保留无障碍标题语义。
+- 旧系统的自适应人物资料使用竖排布局；高版本仍用 ViewThatFits。
+- 预留文本行数使用可缩放行高；高版本继续使用原生行数 API。
+- 多行输入：高版本继续 TextField(axis: .vertical)；iOS 15.6 用透明 UITextView，保留动态字体、占位说明、无障碍名称与双向输入绑定。
+- 5 个较新 SF Symbols 在不可用时采用旧系统替代：邀请、家庭创建、成员权限、烹饪、添加照片。
+
+Craftkin/Integration/PhotoLibraryPicker.swift
+- 通过 PHPickerViewController 支持单张图片、单个视频和混合选择。
+- 替换头像、视频导入和练习素材三处 PhotosPicker，不再依赖 CoreTransferable。
+- NSItemProvider 回调有效期内复制视频至 App 拥有的临时位置，供原有导入校验使用。
+- 图片为空、类型不符或大于 20 MB 时失败；原有视频时长和 200 MB 媒体限制继续由现有导入流程处理。
+- Task 取消时取消 provider 的 Progress，并只完成一次 continuation。迟到回调不能再次完成请求；迟到视频副本会被清理。
+- 页面离开后停止导入状态并取消任务，任务结束后删除临时文件；保存头像仍需用户点击 Save。
+- 原照片处理与视频本地存储流程沿用，不更改文件命名和存储格式。
+
+Craftkin/Integration/PresentationCompatibility.swift
+- 高版本使用原 SwiftUI detents/拖动条和导航背景；iOS 15.6 使用当前卡片的 UISheetPresentationController 和 UINavigationBarAppearance。
+- 继续使用 large 网页卡片、隐藏拖动条、interactiveDismissDisabled 和右上角 Close；保留原有关闭及状态回写。
+- 筛选和引导卡片的原有 medium/large 配置保留。
+- 键盘收起兼容封装只配置所属 ScrollView，避免使用全局 UIAppearance。
+- 导出分享使用 UIActivityViewController，分享同一个已生成的文件 URL。
+
+其它替换
+- LegalConsentHandler 从 Observation 改为 ObservableObject，pages/notice 使用 @Published；两个使用方改为 @ObservedObject。
+- 9 处双参数 onChange 换为旧系统可用的单参数回调。
+- 25 处字体样式组合换为旧版 Font.system(...).weight(...)，保留文字样式和动态字号。
+- 5 处隐藏滚动条改为 ScrollView(showsIndicators: false)。
+- 新版按钮 underline 移到 Text 标签，保持下划线效果。
+- 3 处多行文本输入采用兼容控件。
+- FamilyProfileCoordinator 的默认 LocalMediaStore 在初始化器内部创建，消除原默认参数的主 actor 隔离警告。
+
+保持的行为及资料
+- 固定启动 URL 仍是 https://craftkin.pages.dev/start，不包含 debug=1。
+- AppEntryView 的已有同意记录判断及原生 A 面入口未改。
+- LegalConsentStore、Keychain 安装标识/存储命名、LegalConsentBridge、JS 指令与操作解析、LocalMediaStore 和主要数据存储格式均保持。
+- 仍然没有内置离线协议，失败时只提供在线重试。
+- 当前 Cloudflare 静态站与保留活动源码未修改，本次不部署网站。
+- 不增加原生注释、运行日志、DEBUG 分支、测试 Target 或仓库测试源码。
+
+验证
+1. 最终源码的 Debug、Release 通用 iOS 设备无签名构建均通过。
+   日志：/tmp/craftkin-ios156-debug-build.log、/tmp/craftkin-ios156-release-build.log。
+   构建目录：/tmp/Craftkin-iOS156-Adaptation。
+2. 两个 App 产物 Info.plist 的 MinimumOSVersion 与 Mach-O minos 均为 15.6。
+3. 检查产品没有对 Observation/CoreTransferable/SwiftUICore 引入不可用的新系统强制依赖；没有再次打包离线协议。
+4. 临时 macOS Foundation 验证使用从生产源码提取的实际 NSItemProvider 导入实现：
+   图片字节保持、图片/视频类型过滤、空图片拒绝、20 MB 限制、视频副本在源文件删除后可读、临时文件回收、请求取消及迟到回调均通过。
+   这是导入逻辑验证，不是 iOS 系统选择器界面的运行验证；没有将测试源码加入仓库。
+5. 使用本机 CoreGlyphs name_availability.plist 核对 98 个原有图标名称，发现上述 5 个新系统图标，并提供低于等于 15.6 的替代。
+6. 与变更前的临时源码备份比较，确认入口、桥接指令、同意记录、Keychain 与主要存储实现未改。
+7. git diff --check 及原生注释/日志/DEBUG 源码扫描通过；工程配置复核只有最低部署版本发生变化，签名、Bundle ID 和 App 版本配置保持。
+
+验收边界
+没有运行 App、启动模拟器或安装到手机，不能将编译成功等同于 iOS 15.6 真机验收通过。
+仍需手机检查：协议同意与重启、导航返回、三处照片/视频选择（含 iCloud、取消及失败）、拍摄和播放、导出分享、筛选卡片、网页卡片禁止下拉与 Close、前后台切换、旧数据读取。
+iOS 15.6 的人物资料采用竖排、多行输入显示固定的可滚动编辑区，部分系统导航/卡片动画与高版本会有正常差异；高版本尽量沿用原 UI。
+
+源码临时备份路径记在 /tmp/craftkin-ios156-backup-path；本次文件清单见 SOURCE_CHANGES.txt。

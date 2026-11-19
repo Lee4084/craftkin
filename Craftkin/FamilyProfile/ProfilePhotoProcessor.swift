@@ -23,7 +23,7 @@ enum ProfilePhotoProcessor {
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: 512
               ] as CFDictionary) else { throw ProfilePhotoError.invalidImage }
-        // Re-encode pixels only: original EXIF/location metadata is not copied.
+
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil) else {
             throw ProfilePhotoError.invalidImage

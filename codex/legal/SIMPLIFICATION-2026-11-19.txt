@@ -1,0 +1,27 @@
+协议精简记录
+
+范围：Craftkin / EchoSkill 当前纯静态法律页面。
+将隐私政策从 11 节正文加站点附加段缩为 8 节，服务协议从 11 节缩为 7 节；字数减少约 65%。
+删除全部 20 处不同的模板占位信息，以及未上线服务、重复条款和不准确的通知/非持久化表述。
+保留当前本地处理、系统媒体权限、Cloudflare 托管、持久化网站存储、Keychain 标识、导出/删除、支持、儿童及内容责任等必要说明。
+沿用原文件的开发者身份及地址，没有另行编造或核验。
+统一所有现行法律文档、生成页面、页脚及原生联系常量为 EchoSkillContact@outlook.com。
+
+生成脚本不再自动追加未上线活动说明；活动 API/交互 JS 保持原样。未来活动启用前，需按照实际服务重新核实隐私、删除、支付及数据处理说明。
+原生仅修改 LegalDocument.contactEmail，不修改 URL、缓存、同意版本或桥接逻辑。
+本次没有修复根页没有同意按钮、老用户跳过 H5、活动缓存不再请求策略等独立事项。
+
+已部署静态输出目录：codex/legal/site/static-public/。
+部署地址：https://caccf7a3.craftkin.pages.dev。
+正式域名：https://craftkin.pages.dev。
+
+检查：本地生成内容无占位文字；隐私/服务协议为 8/7 节；固定按钮和 consent version 保留；静态 CSP connect-src 保持 none；git diff --check 通过。
+原生除联系邮箱常量外及活动 JS 通过修改前后哈希对比确认未变。
+构建日志：/tmp/craftkin-legal-contact-build.log。
+旧文档临时备份位置记录于 /tmp/craftkin-legal-simplify-path。
+
+参考：
+https://developer.apple.com/app-store/review/guidelines/#privacy
+https://www.cloudflare.com/privacypolicy/
+
+最终验证：正式域名 /、/privacy、/terms 内容与本地静态输出逐字一致，均只包含新的联系邮箱。Release 无签名编译通过；未运行模拟器或真机。

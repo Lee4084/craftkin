@@ -1,0 +1,9 @@
+统一原生网站 URL 配置
+
+用户要求只保留一个固定入口配置。
+LegalDocument 删除 websiteURL 常量，仅配置 startupURL = https://craftkin.pages.dev/start?debug=1。
+terms/privacy 通过 URL 的相对路径解析从 startupURL 派生为同站点根路径，不继承启动页 debug 查询参数。
+LegalConsentBridge 的消息来源主机比较使用 startupURL.host，不再维护另一份根地址。
+实际启动入口和行为不变，协议同意状态、网页交互和 Cloudflare 静态部署不变，无需重新发布 H5。
+
+验证：Debug 通用 iOS 设备无签名编译通过；原生源码中仅剩一处完整 craftkin 网址配置，无 websiteURL 引用，git diff --check 通过。未运行 App 或模拟器。

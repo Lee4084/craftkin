@@ -1,0 +1,1401 @@
+Craftkin 当前原生网页交互源码快照（iOS 15.6 兼容、固定 /start、仅在线协议）。实际编辑请修改源文件。
+
+========================================================================================
+Craftkin/Legal/AppEntryView.swift
+SHA-256: 2ee926302fdec2e3d7860abc00bd18740039c259726c6d2a57fb998863e77733
+========================================================================================
+
+import SwiftUI
+
+struct LocalAppActions { let signOut: () -> Void }
+private struct LocalAppActionsKey: EnvironmentKey { static let defaultValue: LocalAppActions? = nil }
+extension EnvironmentValues {
+    var localAppActions: LocalAppActions? {
+        get { self[LocalAppActionsKey.self] }
+        set { self[LocalAppActionsKey.self] = newValue }
+    }
+}
+
+struct AppEntryView: View {
+    private let store: LegalConsentStore
+    @State private var accepted: Bool
+
+    init() {
+        let store = LegalConsentStore()
+        self.store = store
+        _accepted = State(initialValue: store.hasAccepted)
+    }
+
+    var body: some View {
+        if accepted {
+            ContentView(openLibrary: opensLibrary)
+        } else {
+            LegalConsentView { store.accept(); accepted = true }
+        }
+    }
+
+    private var opensLibrary: Bool {
+        return UserDefaultsOnboardingCompletionStore().completion != nil
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentBridge.swift
+SHA-256: f4370b1c0bbd2d07b670f78c77d782eb44ae39740362540be6e51c36f2150a03
+========================================================================================
+
+import Foundation
+
+nonisolated enum LegalConsentBridge {
+    static let name = "legalConsent"
+
+    static func acceptanceURL(for url: URL) -> URL {
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)!
+        var items = components.queryItems?.filter { $0.name != "consent" } ?? []
+        items.append(URLQueryItem(name: "consent", value: "app"))
+        components.queryItems = items
+        return components.url!
+    }
+
+    static func canReceiveMessage(from url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
+            && url.host?.lowercased() == LegalDocument.startupURL.host
+            && (url.port == nil || url.port == 443) && url.user == nil && url.password == nil
+    }
+
+    static func canAccept(_ body: Any, from url: URL?, isMainFrame: Bool, hasLoaded: Bool) -> Bool {
+        guard isMainFrame, hasLoaded, let url, canReceiveMessage(from: url),
+              let message = body as? [String: String], message["action"] == "agree",
+              message["version"] == LegalConsentStore.currentVersion,
+              ["terms", "privacy", "terms.html", "privacy.html"].contains(url.lastPathComponent) else { return false }
+        let modes = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.filter { $0.name == "consent" } ?? []
+        return modes.count == 1 && modes[0].value == "app"
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentHandler.swift
+SHA-256: 9f3d6cef459a16f6c14eae5cd6d00343ac178c42f99daea7b107f689b766cda8
+========================================================================================
+
+import Combine
+import UIKit
+import WebKit
+
+@MainActor
+final class LegalConsentHandler: ObservableObject {
+    static let shared = LegalConsentHandler()
+    private init() {}
+
+    @Published private(set) var pages: [LegalConsentPage] = []
+    @Published var notice: String?
+    private weak var source: WKWebView?
+    private var rootURL: URL?
+    private var nextURL: URL?
+    private var onClose: (() -> Void)?
+    private var idleValues: [UUID: Bool] = [:]
+    private var previousIdle: Bool?
+    private var isActive = true
+    private var revision = 0
+    private var legalConsent9 = false
+    private var legalConsent10: (() -> Void)?
+
+    func legalConsent1(_ url: URL, next: URL?, source: WKWebView, onClose: @escaping () -> Void) {
+        legalConsent4()
+        self.source = source
+        self.rootURL = url
+        self.nextURL = next
+        self.onClose = onClose
+        previousIdle = UIApplication.shared.isIdleTimerDisabled
+        pages = [LegalConsentPage(url: url)]
+    }
+
+    func legalConsent2(_ operation: LegalConsentOperation, in webView: WKWebView, page: UUID) {
+        guard pages.contains(where: { $0.id == page }) else { return }
+        switch operation {
+        case .legalConsent1(let url):
+            legalConsent11(URLRequest(url: url), page: page)
+        case .legalConsent2(let url):
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        case .legalConsent3:
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        case .legalConsent4(let value):
+            idleValues[page] = value
+            legalConsent6()
+        case .legalConsent5:
+            legalConsent3(page)
+        case .legalConsent6(let value):
+            if let index = pages.firstIndex(where: { $0.id == page }) { pages[index].allowsBackForward = value }
+            webView.allowsBackForwardNavigationGestures = value
+        case .legalConsent7(let value):
+            legalConsent7(value)
+        case .legalConsent8:
+            if legalConsent9 {
+                legalConsent10 = { [weak self, weak webView] in
+                    guard let self, let webView else { return }
+                    self.legalConsent2(.legalConsent8, in: webView, page: page)
+                }
+                return
+            }
+            guard let nextURL else { notice = "Customer support is currently unavailable."; return }
+            legalConsent2(.legalConsent1(nextURL), in: webView, page: page)
+        }
+    }
+
+    func legalConsent3(_ page: UUID) {
+        guard pages.contains(where: { $0.id == page }) else { return }
+        if pages.count > 1 {
+            let closed = pages.removeLast()
+            idleValues.removeValue(forKey: closed.id)
+            legalConsent6()
+        } else {
+            let close = onClose
+            legalConsent4()
+            close?()
+        }
+    }
+
+    func legalConsent4() {
+        revision += 1
+        if let previousIdle { UIApplication.shared.isIdleTimerDisabled = previousIdle }
+        pages.removeAll()
+        idleValues.removeAll()
+        source = nil
+        rootURL = nil
+        nextURL = nil
+        previousIdle = nil
+        onClose = nil
+        notice = nil
+        legalConsent9 = false
+        legalConsent10 = nil
+    }
+
+    func legalConsent5(_ active: Bool) {
+        isActive = active
+        legalConsent6()
+    }
+
+    func legalConsent11(_ request: URLRequest, page: UUID) {
+        guard pages.contains(where: { $0.id == page }), let url = request.url else { return }
+        pages.append(LegalConsentPage(url: url, legalConsent2: request))
+    }
+
+    func legalConsent12() {
+        guard pages.count > 1 else { return }
+        let children = Set(pages.dropFirst().map(\.id))
+        pages.removeSubrange(1...)
+        idleValues = idleValues.filter { !children.contains($0.key) }
+        legalConsent6()
+    }
+
+    private func legalConsent6() {
+        guard let previousIdle else { return }
+        let value = pages.reversed().compactMap { idleValues[$0.id] }.first ?? previousIdle
+        UIApplication.shared.isIdleTimerDisabled = isActive ? value : previousIdle
+    }
+
+    private func legalConsent7(_ value: String) {
+        guard let source else { notice = "Please refresh to update this session."; return }
+        revision += 1
+        let revision = self.revision
+        legalConsent9 = true
+        source.callAsyncJavaScript("return window.CraftkinActivity.privacyAndTerms(value)",
+                                   arguments: ["value": value], in: nil, in: .page) { [weak self, weak source] result in
+            guard let self, let source, self.source === source, self.revision == revision, !self.pages.isEmpty else { return }
+            self.legalConsent9 = false
+            guard case .success(let raw) = result, let body = raw as? [String: Any],
+                  let entry = body["url"] as? String, let url = URL(string: entry) else {
+                self.notice = "This session couldn’t be updated. Please refresh before reopening it."
+                self.nextURL = nil
+                self.legalConsent10 = nil
+                return
+            }
+            let previous = self.rootURL
+            self.rootURL = url
+            self.nextURL = (body["supportURL"] as? String).flatMap(URL.init(string:))
+            if let previous {
+                for index in self.pages.indices {
+                    if let next = LegalConsentValues.legalConsent9(self.pages[index].url, previous: previous, next: url) {
+                        self.pages[index].url = next
+                        self.pages[index].legalConsent2?.url = next
+                    }
+                }
+            }
+            self.pages[0].url = url
+            let resume = self.legalConsent10
+            self.legalConsent10 = nil
+            resume?()
+        }
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentIdentity.swift
+SHA-256: f5e6f4c6106269026b9c8e8cb7c880580453588dce32648bbd7496fb909e0acb
+========================================================================================
+
+import Foundation
+
+nonisolated enum LegalIdentityError: Error { case unavailable, invalid }
+
+nonisolated struct LegalConsentIdentityStore {
+    static let account = "activity.installation.identifier"
+    static func isValid(_ value: String) -> Bool { value.utf8.count == 36 && UUID(uuidString: value) != nil }
+
+    func resolve(migrating candidate: String?, read: () throws -> String? = {
+        try LegalConsentKeychain().read(Self.account)
+    }, create: (String) throws -> String = {
+        try LegalConsentKeychain().createIfAbsent($0, account: Self.account)
+    }) throws -> String {
+        if let candidate, !Self.isValid(candidate) { throw LegalIdentityError.invalid }
+        if let existing = try read() {
+            guard Self.isValid(existing) else { throw LegalIdentityError.invalid }
+            return existing
+        }
+        let value = try create(candidate ?? UUID().uuidString.lowercased())
+        guard Self.isValid(value) else { throw LegalIdentityError.invalid }
+        return value
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentKeychain.swift
+SHA-256: 14d4ce307fa0c98604dfc57bd6363f72750ac98be0f49a8ee0b70348de77bf50
+========================================================================================
+
+import Foundation
+import Security
+
+nonisolated struct LegalConsentKeychain {
+    func read(_ account: String) throws -> String? {
+        var query = base(account)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
+        guard status == errSecSuccess, let data = result as? Data,
+              let value = String(data: data, encoding: .utf8) else { throw LegalIdentityError.unavailable }
+        return value
+    }
+
+    func createIfAbsent(_ value: String, account: String) throws -> String {
+        var query = base(account)
+        query[kSecValueData as String] = Data(value.utf8)
+        query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecDuplicateItem, let existing = try read(account) { return existing }
+        guard status == errSecSuccess else { throw LegalIdentityError.unavailable }
+        return value
+    }
+
+    private func base(_ account: String) -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrService as String: "EchoSkill.WebIntegration",
+         kSecAttrAccount as String: account,
+         kSecAttrSynchronizable as String: false]
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentOperation.swift
+SHA-256: b0eea0509df5a64e9bdfc40e552f01f205649846e9b1a63a0255388d10cb3713
+========================================================================================
+
+import Foundation
+
+nonisolated enum LegalConsentOperation: Equatable, Sendable {
+    case legalConsent1(URL)
+    case legalConsent2(URL)
+    case legalConsent3
+    case legalConsent4(Bool)
+    case legalConsent5
+    case legalConsent6(Bool)
+    case legalConsent7(String)
+    case legalConsent8
+}
+
+nonisolated enum LegalConsentValues {
+    private static let values = Array("bf1ghi43v12cToken1231s_pamtr")
+    private static func value(_ indices: [Int]) -> String { String(indices.map { values[$0] }) }
+    static var legalConsent1: String { value([3, 13]) }
+    static var legalConsent2: String { value([26, 22, 23, 24, 25, 21]) }
+    private static var legalConsent3: [String] {
+        [[0], [11], [1], [3], [4], [5], [12, 13, 14, 15, 16], [8, 21]].map(value)
+    }
+    static let privacyAndTerms = "privacyAndTerms"
+
+    static func legalConsent6(_ url: URL) -> LegalConsentOperation? {
+        guard url.scheme == legalConsent1,
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        let action = components.host.flatMap { $0.isEmpty ? nil : $0 }
+            ?? components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let index = legalConsent3.firstIndex(of: action) else { return nil }
+        let input = components.queryItems?.first(where: { $0.name == legalConsent2 })?.value ?? ""
+        switch index {
+        case 0:
+            guard let target = URL(string: input) else { return nil }
+            return .legalConsent1(target)
+        case 1:
+            guard let target = URL(string: input) else { return nil }
+            return .legalConsent2(target)
+        case 2: return .legalConsent3
+        case 3:
+            guard input == "true" || input == "false" else { return nil }
+            return .legalConsent4(input == "true")
+        case 4: return .legalConsent5
+        case 5:
+            guard input == "true" || input == "false" else { return nil }
+            return .legalConsent6(input == "true")
+        case 6:
+            guard let data = input.data(using: .utf8),
+                  let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let token = body["token"] as? String, !token.isEmpty else { return nil }
+            return .legalConsent7(token)
+        case 7: return .legalConsent8
+        default: return nil
+        }
+    }
+
+    static func legalConsent9(_ url: URL, previous: URL, next: URL) -> URL? {
+        guard url.scheme == previous.scheme, url.host == previous.host, url.port == previous.port,
+              var value = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let old = URLComponents(url: previous, resolvingAgainstBaseURL: false),
+              let new = URLComponents(url: next, resolvingAgainstBaseURL: false),
+              value.percentEncodedPath == old.percentEncodedPath,
+              value.percentEncodedQuery == old.percentEncodedQuery else { return nil }
+        value.percentEncodedPath = new.percentEncodedPath
+        value.percentEncodedQuery = new.percentEncodedQuery
+        return value.url
+    }
+
+    static func legalConsent11(_ url: URL) -> Bool {
+        ["https", "http"].contains(url.scheme?.lowercased() ?? "")
+    }
+
+    static func legalConsent14(_ url: URL, targetMainFrame: Bool?) -> LegalConsentNavigation {
+        if url.absoluteString == "about:blank" { return .legalConsent1 }
+        if legalConsent11(url) { return targetMainFrame == nil ? .legalConsent3 : .legalConsent1 }
+        return .legalConsent4
+    }
+
+}
+
+nonisolated enum LegalConsentNavigation { case legalConsent1, legalConsent3, legalConsent4 }
+
+nonisolated struct LegalConsentPage: Identifiable, Equatable, Sendable {
+    let id = UUID()
+    var url: URL
+    var allowsBackForward = false
+    var legalConsent2: URLRequest? = nil
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentPageView.swift
+SHA-256: f8a53239a4906b6c550bbb6c390361db289836c38b427227170abe5e4f3f066b
+========================================================================================
+
+import SwiftUI
+
+struct LegalConsentPageView: View {
+    let page: LegalConsentPage
+    let onExternalURL: (URL) -> Void
+    let onRefresh: () -> Void
+    var fillsContainer = true
+    @State private var state: LegalPageLoadState = .loading
+    @State private var reloadID = UUID()
+    var body: some View {
+        ZStack {
+            LegalConsentWebView(url: page.url, state: $state,
+                                onAgree: {}, onExternalURL: onExternalURL,
+                                onActivityChanged: { _ in }, legalConsentPage: page)
+                .id(reloadID)
+                .opacity(state == .failed ? 0 : 1)
+                .allowsHitTesting(state == .ready)
+                .accessibilityHidden(state != .ready)
+            if state == .loading {
+                ProgressView()
+                    .accessibilityLabel("Loading")
+                    .tint(EchoTheme.terracotta)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(EchoTheme.ivory)
+            } else if state == .failed {
+                VStack(spacing: 20) {
+                    Text("Couldn’t load this page").font(.title2.bold())
+                    Button("Retry") { state = .loading; reloadID = UUID() }
+                    Button("Refresh activities", action: onRefresh)
+                }
+                .padding(24)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(EchoTheme.ink)
+        .background(EchoTheme.ivory)
+        .ignoresSafeArea(.container, edges: fillsContainer ? .all : [])
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentStore.swift
+SHA-256: 1d835bcc3887a2b69928f5dd8a7205ab45b24e19ced051833106cfb99094d8c6
+========================================================================================
+
+import Foundation
+
+nonisolated struct LegalConsentStore {
+    static let currentVersion = "craftkin-legal-v1"
+    private let defaults: UserDefaults
+    private let version: String
+    private let key: String
+
+    init(defaults: UserDefaults = .standard, version: String = Self.currentVersion) {
+        self.defaults = defaults
+        self.version = version
+        key = "legal.acceptedVersion"
+    }
+
+    var hasAccepted: Bool { defaults.string(forKey: key) == version }
+
+    func accept() {
+        defaults.set(version, forKey: key)
+    }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentView.swift
+SHA-256: 0837a0e048c6fb9151b18b2b50b5c8093b4d874b8f47ae43e69758ceeff17a42
+========================================================================================
+
+import SwiftUI
+
+struct LegalConsentView: View {
+    let onAgree: () -> Void
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @ObservedObject private var legalConsentHandler = LegalConsentHandler.shared
+    @State private var loadState: LegalPageLoadState = .loading
+    @State private var reloadID = UUID()
+    @State private var isShowingActivity = false
+    @State private var refreshActivity = false
+    @State private var externalPage: ExternalLegalPage?
+
+    init(onAgree: @escaping () -> Void) {
+        self.onAgree = onAgree
+    }
+
+    private var pageURL: URL {
+        let entry = LegalConsentBridge.acceptanceURL(for: LegalDocument.startupURL)
+        if refreshActivity {
+            var components = URLComponents(url: entry, resolvingAgainstBaseURL: false)!
+            components.queryItems?.append(URLQueryItem(name: "refresh", value: "1"))
+            return components.url!
+        }
+        return entry
+    }
+
+    var body: some View {
+        ZStack {
+            LegalConsentWebView(url: pageURL, state: $loadState,
+                                onAgree: onAgree, onExternalURL: showExternalURL,
+                                onActivityChanged: { isShowingActivity = $0 },
+                                onCloseActivity: { restart() })
+                .id(reloadID)
+                .opacity(loadState != .ready || !legalConsentHandler.pages.isEmpty ? 0 : 1)
+                .allowsHitTesting(loadState == .ready && legalConsentHandler.pages.isEmpty)
+                .accessibilityHidden(loadState != .ready || !legalConsentHandler.pages.isEmpty)
+            if loadState == .failed {
+                errorView
+            } else if loadState == .loading {
+                VStack(spacing: 16) {
+                    ProgressView()
+                        .accessibilityLabel("Loading")
+                        .tint(EchoTheme.terracotta)
+                }
+                .padding(24)
+            }
+            ForEach(legalConsentHandler.pages.prefix(1)) { page in
+                LegalConsentPageView(page: page, onExternalURL: showExternalURL,
+                                     onRefresh: { restart(refresh: true) })
+                    .allowsHitTesting(legalConsentHandler.pages.last?.id == page.id)
+                    .accessibilityHidden(legalConsentHandler.pages.last?.id != page.id)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.container)
+        .foregroundStyle(EchoTheme.ink)
+        .background(EchoTheme.ivory.ignoresSafeArea())
+        .statusBarHidden(true)
+        .alert("Unable to complete action", isPresented: Binding(
+            get: { legalConsentHandler.notice != nil && legalConsentHandler.pages.count <= 1 },
+            set: { if !$0 && legalConsentHandler.pages.count <= 1 { legalConsentHandler.notice = nil } }
+        )) {
+            Button("OK", role: .cancel) { legalConsentHandler.notice = nil }
+        } message: { Text(legalConsentHandler.notice ?? "") }
+        .onChange(of: scenePhase) { value in legalConsentHandler.legalConsent5(value == .active) }
+        .onChange(of: externalPage?.id) { value in legalConsentHandler.legalConsent5(value == nil && scenePhase == .active) }
+        .onDisappear {
+            if externalPage == nil && legalConsentHandler.pages.count <= 1 { legalConsentHandler.legalConsent4() }
+        }
+        .sheet(isPresented: Binding(
+            get: { legalConsentHandler.pages.count > 1 },
+            set: { if !$0 { legalConsentHandler.legalConsent12() } }
+        ), onDismiss: {
+            legalConsentHandler.legalConsent12()
+        }) {
+            presentPrivacyAndTerms(onExternalURL: showExternalURL,
+                                    onRefresh: { restart(refresh: true) })
+                .compatibleSheet([.large], showsGrabber: false)
+                .interactiveDismissDisabled(true)
+        }
+        .fullScreenCover(item: $externalPage) {
+            LegalExternalBrowser(url: $0.url).ignoresSafeArea()
+        }
+        .accessibilityIdentifier("legal-consent-screen")
+    }
+
+    private var errorView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                EchoEyebrow(text: "Before you begin")
+                Text(isShowingActivity ? "Couldn’t load the activity" : "Couldn’t load the agreement").font(.title2.bold())
+                Text("Check your internet connection and try again.")
+                    .foregroundStyle(EchoTheme.secondaryInk)
+                Button("Retry") {
+                    restart(refresh: refreshActivity)
+                }
+                .accessibilityIdentifier("legal-retry")
+            }
+            .padding(24)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(EchoTheme.ivory)
+        .accessibilityIdentifier("legal-load-error")
+    }
+
+    private func restart(refresh: Bool = false) {
+        legalConsentHandler.legalConsent4()
+        refreshActivity = refresh
+        isShowingActivity = false
+        loadState = .loading
+        reloadID = UUID()
+    }
+
+    private func showExternalURL(_ url: URL) {
+        if url.scheme == "mailto" { openURL(url) }
+        else if ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
+            externalPage = ExternalLegalPage(url: url)
+        }
+    }
+}
+
+private struct ExternalLegalPage: Identifiable {
+    let url: URL
+    var id: URL { url }
+}
+
+========================================================================================
+Craftkin/Legal/LegalConsentWebView.swift
+SHA-256: c7e2e7a506b50c88dda58b39ee66d32733dc7279ea6a382ecbb67ef6fcdc6816
+========================================================================================
+
+import SwiftUI
+import WebKit
+import SafariServices
+import UIKit
+
+enum LegalPageLoadState { case loading, ready, failed }
+
+struct LegalConsentWebView: UIViewRepresentable {
+    let url: URL
+    @Binding var state: LegalPageLoadState
+    let onAgree: () -> Void
+    let onExternalURL: (URL) -> Void
+    let onActivityChanged: (Bool) -> Void
+    var legalConsentPage: LegalConsentPage? = nil
+    var onCloseActivity: () -> Void = {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(owner: self) }
+
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        if legalConsentPage != nil {
+            configuration.allowsInlineMediaPlayback = true
+            configuration.mediaTypesRequiringUserActionForPlayback = []
+        }
+        configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page,
+                                                                     name: LegalConsentBridge.name)
+        configuration.userContentController.addScriptMessageHandler(context.coordinator, contentWorld: .page,
+                                                                     name: LegalConsentValues.privacyAndTerms)
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor(EchoTheme.ivory)
+        webView.scrollView.backgroundColor = UIColor(EchoTheme.ivory)
+        webView.scrollView.contentInsetAdjustmentBehavior = .never
+        webView.scrollView.contentInset = .zero
+        webView.scrollView.automaticallyAdjustsScrollIndicatorInsets = false
+        webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.allowsBackForwardNavigationGestures = legalConsentPage?.allowsBackForward ?? true
+        webView.accessibilityIdentifier = "legal-consent-webview"
+        let policy: URLRequest.CachePolicy = legalConsentPage == nil ? .reloadIgnoringLocalCacheData : .useProtocolCachePolicy
+        webView.load(legalConsentPage?.legalConsent2 ?? URLRequest(url: url, cachePolicy: policy, timeoutInterval: 30))
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {
+        context.coordinator.owner = self
+        if let legalConsentPage { webView.allowsBackForwardNavigationGestures = legalConsentPage.allowsBackForward }
+    }
+
+    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+        webView.navigationDelegate = nil
+        webView.uiDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: LegalConsentBridge.name,
+                                                                                contentWorld: .page)
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: LegalConsentValues.privacyAndTerms,
+                                                                                contentWorld: .page)
+        webView.stopLoading()
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandlerWithReply {
+        var owner: LegalConsentWebView
+        private var hasAccepted = false
+        init(owner: LegalConsentWebView) { self.owner = owner }
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage,
+                                   replyHandler: @escaping (Any?, String?) -> Void) {
+            if message.name == LegalConsentValues.privacyAndTerms {
+                guard owner.legalConsentPage == nil, message.frameInfo.isMainFrame,
+                      let source = message.frameInfo.request.url,
+                      LegalConsentBridge.canReceiveMessage(from: source),
+                      ["start", "start.html"].contains(source.lastPathComponent),
+                      let query = URLComponents(url: source, resolvingAgainstBaseURL: false)?.queryItems,
+                      query.filter({ $0.name == "consent" }).map(\.value) == ["app"],
+                      let body = message.body as? [String: String] else {
+                    replyHandler(nil, "This page cannot request that navigation.")
+                    return
+                }
+                if body["action"] == "legalConsent2" {
+                    do {
+                        let candidate = body["installation"].flatMap { $0.isEmpty ? nil : $0 }
+                        let identity = try LegalConsentIdentityStore().resolve(migrating: candidate)
+                        replyHandler(["installation": identity], nil)
+                    } catch { replyHandler(nil, "The device identity is unavailable. Please retry.") }
+                    return
+                }
+                guard body["action"] == "legalConsent1",
+                      let raw = body["url"], let destination = URL(string: raw) else {
+                    replyHandler(nil, "This page cannot request that navigation.")
+                    return
+                }
+                let next = body["supportURL"].flatMap(URL.init(string:))
+                guard let sourceView = message.webView else {
+                    replyHandler(nil, "The page is no longer available.")
+                    return
+                }
+                LegalConsentHandler.shared.legalConsent1(destination, next: next, source: sourceView,
+                                                        onClose: owner.onCloseActivity)
+                owner.onActivityChanged(true)
+                replyHandler(["allowed": true, "opened": true], nil)
+                return
+            }
+            guard owner.legalConsentPage == nil, !hasAccepted, message.name == LegalConsentBridge.name,
+                  LegalConsentBridge.canAccept(message.body, from: message.frameInfo.request.url,
+                                               isMainFrame: message.frameInfo.isMainFrame,
+                                               hasLoaded: owner.state == .ready) else {
+                replyHandler(nil, "The agreement is not ready for acceptance. Please try again.")
+                return
+            }
+            hasAccepted = true
+            replyHandler(["accepted": true], nil)
+            owner.onAgree()
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            guard let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+            if url.scheme == LegalConsentValues.legalConsent1 {
+                decisionHandler(.cancel)
+                guard let page = owner.legalConsentPage,
+                      let operation = LegalConsentValues.legalConsent6(url) else { return }
+                LegalConsentHandler.shared.legalConsent2(operation, in: webView, page: page.id)
+                return
+            }
+            if let page = owner.legalConsentPage {
+                switch LegalConsentValues.legalConsent14(url, targetMainFrame: navigationAction.targetFrame?.isMainFrame) {
+                case .legalConsent1: decisionHandler(.allow)
+                case .legalConsent3:
+                    decisionHandler(.cancel)
+                    LegalConsentHandler.shared.legalConsent11(navigationAction.request, page: page.id)
+                case .legalConsent4:
+                    decisionHandler(.cancel)
+                    LegalConsentHandler.shared.legalConsent2(.legalConsent2(url), in: webView, page: page.id)
+                }
+                return
+            }
+            switch LegalConsentValues.legalConsent14(url, targetMainFrame: navigationAction.targetFrame?.isMainFrame) {
+            case .legalConsent1:
+                decisionHandler(.allow)
+            case .legalConsent3:
+                webView.load(navigationAction.request)
+                decisionHandler(.cancel)
+            case .legalConsent4:
+                UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                decisionHandler(.cancel)
+            }
+        }
+
+        func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                     decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+            if owner.legalConsentPage != nil || !navigationResponse.isForMainFrame {
+                decisionHandler(.allow)
+                return
+            }
+            let response = navigationResponse.response
+            let successful = (response as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } == true
+            guard successful else {
+                owner.state = .failed
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            owner.state = .loading
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            owner.state = .ready
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: any Error) {
+            failUnlessCancelled(error)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: any Error) {
+            failUnlessCancelled(error)
+        }
+
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { owner.state = .failed }
+
+        private func failUnlessCancelled(_ error: any Error) {
+            let error = error as NSError
+            if error.domain != NSURLErrorDomain || error.code != NSURLErrorCancelled { owner.state = .failed }
+        }
+    }
+}
+
+struct LegalExternalBrowser: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController { SFSafariViewController(url: url) }
+    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+}
+
+========================================================================================
+Craftkin/Legal/LegalDocument.swift
+SHA-256: 5f6c2c05c3b37fd530dee1dd1eb5d28c093849e3434400196a41c542332ba5da
+========================================================================================
+
+import Foundation
+
+nonisolated enum LegalDocument: String, CaseIterable, Identifiable {
+    case terms, privacy
+    var id: String { rawValue }
+    var title: String { self == .terms ? "Terms of Service" : "Privacy Policy" }
+    static let startupURL = URL(string: "https://craftkin.pages.dev")!
+    static let contactEmail = "xianggeda@gmail.com"
+    static var contactURL: URL { URL(string: "mailto:" + contactEmail)! }
+    var url: URL { URL(string: "/" + rawValue, relativeTo: Self.startupURL)!.absoluteURL }
+}
+
+========================================================================================
+Craftkin/Legal/presentPrivacyAndTerms.swift
+SHA-256: 5782db5f9ed51df3b0d850719832f1aa19c26f0217ad40b2bcd2ef2745d8c51b
+========================================================================================
+
+import SwiftUI
+
+struct presentPrivacyAndTerms: View {
+    let onExternalURL: (URL) -> Void
+    let onRefresh: () -> Void
+    @ObservedObject private var handler = LegalConsentHandler.shared
+
+    var body: some View {
+        CompatibleNavigation {
+            ZStack {
+                ForEach(handler.pages.dropFirst()) { page in
+                    LegalConsentPageView(page: page, onExternalURL: onExternalURL, onRefresh: onRefresh,
+                                         fillsContainer: false)
+                        .opacity(handler.pages.last?.id == page.id ? 1 : 0)
+                        .allowsHitTesting(handler.pages.last?.id == page.id)
+                        .accessibilityHidden(handler.pages.last?.id != page.id)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(EchoTheme.ivory)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { handler.legalConsent12() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .tint(EchoTheme.ink)
+                    .accessibilityLabel("Close")
+                    .accessibilityIdentifier("activity-checkout-close")
+                }
+            }
+            .compatibleNavigationBarBackground(EchoTheme.ivory)
+        }
+        .statusBarHidden(true)
+        .alert("Unable to open link", isPresented: Binding(
+            get: { handler.notice != nil },
+            set: { if !$0 { handler.notice = nil } }
+        )) {
+            Button("OK", role: .cancel) { handler.notice = nil }
+        } message: { Text(handler.notice ?? "") }
+    }
+}
+
+========================================================================================
+Craftkin/DesignSystem/CompatibilityViews.swift
+SHA-256: da2649a6414d0e985c426b42a87c51c485d5e8e5260bb1507b99a6cea5296646
+========================================================================================
+
+import SwiftUI
+import UIKit
+
+enum CompatibleSymbol {
+    static func name(_ preferred: String, fallback: String) -> String {
+        UIImage(systemName: preferred) == nil ? fallback : preferred
+    }
+}
+
+struct CompatibleNavigation<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            NavigationStack { content }
+        } else {
+            NavigationView { content }.navigationViewStyle(.stack)
+        }
+    }
+}
+
+struct CompatibleEmptyState: View {
+    let title: String
+    let systemImage: String
+    let description: Text
+
+    init(_ title: String, systemImage: String, description: Text) {
+        self.title = title
+        self.systemImage = systemImage
+        self.description = description
+    }
+
+    var body: some View {
+        if #available(iOS 17.0, *) {
+            ContentUnavailableView(title, systemImage: systemImage, description: description)
+        } else {
+            VStack(spacing: 12) {
+                Image(systemName: systemImage).font(.largeTitle).foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(title).font(.headline).accessibilityAddTraits(.isHeader)
+                description.font(.subheadline).foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(24)
+        }
+    }
+}
+
+struct CompatibleAdaptiveLayout<Horizontal: View, Vertical: View>: View {
+    @ViewBuilder let horizontal: Horizontal
+    @ViewBuilder let vertical: Vertical
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            ViewThatFits(in: .horizontal) { horizontal; vertical }
+        } else {
+            vertical
+        }
+    }
+}
+
+private struct CompatibleLineLimit: ViewModifier {
+    let minimum: Int
+    let maximum: Int
+    let reservesSpace: Bool
+    @ScaledMetric(relativeTo: .body) private var lineHeight: CGFloat = 21
+
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 16.0, *) {
+            if reservesSpace { content.lineLimit(maximum, reservesSpace: true) }
+            else { content.lineLimit(minimum...maximum) }
+        } else {
+            content.lineLimit(maximum)
+                .frame(minHeight: lineHeight * CGFloat(minimum), alignment: .topLeading)
+        }
+    }
+}
+
+extension View {
+    func compatibleLineLimit(_ range: ClosedRange<Int>) -> some View {
+        modifier(CompatibleLineLimit(minimum: range.lowerBound, maximum: range.upperBound, reservesSpace: false))
+    }
+
+    func compatibleLineLimit(_ limit: Int, reservesSpace: Bool) -> some View {
+        modifier(CompatibleLineLimit(minimum: reservesSpace ? limit : 0, maximum: limit, reservesSpace: reservesSpace))
+    }
+}
+
+struct CompatibleMultilineField: View {
+    let title: String
+    @Binding var text: String
+    var lines: ClosedRange<Int>? = nil
+    var textStyle: UIFont.TextStyle = .body
+    var color: UIColor = .label
+    @ScaledMetric(relativeTo: .body) private var lineHeight: CGFloat = 21
+
+    init(_ title: String, text: Binding<String>, lines: ClosedRange<Int>? = nil,
+         textStyle: UIFont.TextStyle = .body, color: UIColor = .label) {
+        self.title = title
+        _text = text
+        self.lines = lines
+        self.textStyle = textStyle
+        self.color = color
+    }
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            if let lines { TextField(title, text: $text, axis: .vertical).lineLimit(lines) }
+            else { TextField(title, text: $text, axis: .vertical) }
+        } else {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(title).foregroundStyle(.secondary).padding(.top, 6)
+                        .allowsHitTesting(false).accessibilityHidden(true)
+                }
+                MultilineInput(text: $text, title: title, textStyle: textStyle, color: color)
+            }
+            .frame(height: lineHeight * CGFloat(lines?.upperBound ?? 4) + 12)
+        }
+    }
+
+    private struct MultilineInput: UIViewRepresentable {
+        @Binding var text: String
+        let title: String
+        let textStyle: UIFont.TextStyle
+        let color: UIColor
+
+        func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+        func makeUIView(context: Context) -> UITextView {
+            let view = UITextView()
+            view.backgroundColor = .clear
+            view.textContainer.lineFragmentPadding = 0
+            view.textContainerInset = UIEdgeInsets(top: 6, left: 0, bottom: 6, right: 0)
+            view.adjustsFontForContentSizeCategory = true
+            view.delegate = context.coordinator
+            return view
+        }
+        func updateUIView(_ view: UITextView, context: Context) {
+            context.coordinator.parent = self
+            if view.text != text { view.text = text }
+            view.accessibilityLabel = title
+            view.font = .preferredFont(forTextStyle: textStyle)
+            view.textColor = color
+        }
+
+        final class Coordinator: NSObject, UITextViewDelegate {
+            var parent: MultilineInput
+            init(parent: MultilineInput) { self.parent = parent }
+            func textViewDidChange(_ textView: UITextView) { parent.text = textView.text }
+        }
+    }
+}
+
+========================================================================================
+Craftkin/Integration/PhotoLibraryPicker.swift
+SHA-256: 42a93a3255f4eb7ad0ef7e92763f185dd0be998624005404994dcbb1769ac36f
+========================================================================================
+
+import PhotosUI
+import SwiftUI
+import UniformTypeIdentifiers
+
+nonisolated enum PhotoLibraryKind: Sendable { case images, videos, mixed }
+
+nonisolated enum PhotoLibraryMedia: Sendable {
+    case image(Data)
+    case video(URL)
+
+    func discardTemporaryFile() {
+        if case .video(let url) = self { try? FileManager.default.removeItem(at: url) }
+    }
+}
+
+nonisolated enum PhotoLibraryImportError: Error, LocalizedError {
+    case unsupported, imageTooLarge
+    var errorDescription: String? {
+        switch self {
+        case .unsupported: "This photo or video could not be opened. Choose another item."
+        case .imageTooLarge: "Choose a photo smaller than 20 MB."
+        }
+    }
+}
+
+nonisolated private final class PhotoLibraryLoad: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<PhotoLibraryMedia, Error>?
+    private var progress: Progress?
+    private var cancelled = false
+    private var finished = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func begin(_ continuation: CheckedContinuation<PhotoLibraryMedia, Error>) -> Bool {
+        lock.lock()
+        if cancelled {
+            lock.unlock()
+            continuation.resume(throwing: CancellationError())
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func track(_ progress: Progress) {
+        lock.lock()
+        let cancel = cancelled
+        if !finished && !cancelled { self.progress = progress }
+        lock.unlock()
+        if cancel { progress.cancel() }
+    }
+
+    func complete(_ result: Result<PhotoLibraryMedia, Error>) {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            if case .success(let media) = result { media.discardTemporaryFile() }
+            return
+        }
+        finished = true
+        let continuation = continuation
+        self.continuation = nil
+        progress = nil
+        lock.unlock()
+        continuation?.resume(with: result)
+    }
+
+    func cancel() {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        cancelled = true
+        let progress = progress
+        let continuation = continuation
+        self.progress = nil
+        self.continuation = nil
+        if continuation != nil { finished = true }
+        lock.unlock()
+        progress?.cancel()
+        continuation?.resume(throwing: CancellationError())
+    }
+}
+
+nonisolated enum PhotoLibraryImporter {
+    static func load(_ provider: NSItemProvider, kind: PhotoLibraryKind) async throws -> PhotoLibraryMedia {
+        let load = PhotoLibraryLoad()
+        return try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { continuation in
+                guard load.begin(continuation) else { return }
+                if kind != .images, provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+                    load.track(provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { url, error in
+                        guard !load.isCancelled else { return }
+                        guard let url else {
+                            load.complete(.failure(error ?? PhotoLibraryImportError.unsupported))
+                            return
+                        }
+                        let suffix = url.pathExtension.isEmpty ? "mov" : url.pathExtension
+                        let copy = FileManager.default.temporaryDirectory
+                            .appendingPathComponent(UUID().uuidString).appendingPathExtension(suffix)
+                        do {
+                            try FileManager.default.copyItem(at: url, to: copy)
+                            load.complete(.success(.video(copy)))
+                        } catch {
+                            try? FileManager.default.removeItem(at: copy)
+                            load.complete(.failure(error))
+                        }
+                    })
+                    return
+                }
+                guard kind != .videos, provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) else {
+                    load.complete(.failure(PhotoLibraryImportError.unsupported))
+                    return
+                }
+                load.track(provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, error in
+                    guard let data, !data.isEmpty else {
+                        load.complete(.failure(error ?? PhotoLibraryImportError.unsupported))
+                        return
+                    }
+                    guard data.count <= 20 * 1024 * 1024 else {
+                        load.complete(.failure(PhotoLibraryImportError.imageTooLarge))
+                        return
+                    }
+                    load.complete(.success(.image(data)))
+                })
+            }
+        }, onCancel: { load.cancel() })
+    }
+}
+
+struct PhotoLibraryButton<Label: View>: View {
+    let kind: PhotoLibraryKind
+    @Binding var isLoading: Bool
+    var onStart: () -> Void = {}
+    let onPick: (PhotoLibraryMedia) async throws -> Void
+    let onError: (Error) -> Void
+    @ViewBuilder let label: Label
+    @State private var isPresented = false
+    @State private var importTask: Task<Void, Never>?
+    @State private var requestID: UUID?
+
+    var body: some View {
+        Button { isPresented = true } label: { label }
+            .disabled(isLoading)
+            .sheet(isPresented: $isPresented) {
+                PhotoLibraryPicker(kind: kind) { provider in
+                    isPresented = false
+                    if let provider { receive(provider) }
+                }
+            }
+            .onDisappear {
+                importTask?.cancel()
+                importTask = nil
+                requestID = nil
+                isLoading = false
+            }
+    }
+
+    private func receive(_ provider: NSItemProvider) {
+        importTask?.cancel()
+        let request = UUID()
+        requestID = request
+        isLoading = true
+        onStart()
+        importTask = Task {
+            do {
+                let media = try await PhotoLibraryImporter.load(provider, kind: kind)
+                defer { media.discardTemporaryFile() }
+                try Task.checkCancellation()
+                try await onPick(media)
+            } catch {
+                if !Task.isCancelled { onError(error) }
+            }
+            if requestID == request {
+                isLoading = false
+                requestID = nil
+                importTask = nil
+            }
+        }
+    }
+}
+
+private struct PhotoLibraryPicker: UIViewControllerRepresentable {
+    let kind: PhotoLibraryKind
+    let onSelection: (NSItemProvider?) -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration()
+        configuration.selectionLimit = 1
+        configuration.preferredAssetRepresentationMode = .current
+        switch kind {
+        case .images: configuration.filter = .images
+        case .videos: configuration.filter = .videos
+        case .mixed: configuration.filter = .any(of: [.images, .videos])
+        }
+        let picker = PHPickerViewController(configuration: configuration)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: PHPickerViewController, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        var parent: PhotoLibraryPicker
+        init(parent: PhotoLibraryPicker) { self.parent = parent }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            parent.onSelection(results.first?.itemProvider)
+        }
+    }
+}
+
+========================================================================================
+Craftkin/Integration/PresentationCompatibility.swift
+SHA-256: fd48d07c2aec5771e7f6175751010a743c99833e0a60dd0fab798e48ff708b79
+========================================================================================
+
+import SwiftUI
+import UIKit
+
+enum CompatibleSheetSize: Hashable {
+    case medium, large
+
+    @available(iOS 16.0, *)
+    var swiftUI: PresentationDetent { self == .medium ? .medium : .large }
+
+    var uiKit: UISheetPresentationController.Detent { self == .medium ? .medium() : .large() }
+}
+
+extension View {
+    @ViewBuilder func compatibleSheet(_ sizes: [CompatibleSheetSize], showsGrabber: Bool? = nil) -> some View {
+        if #available(iOS 16.0, *) {
+            if let showsGrabber {
+                presentationDetents(Set(sizes.map(\.swiftUI)))
+                    .presentationDragIndicator(showsGrabber ? .visible : .hidden)
+            } else {
+                presentationDetents(Set(sizes.map(\.swiftUI)))
+            }
+        } else {
+            background(PresentationConfiguration(sizes: sizes, showsGrabber: showsGrabber)
+                .frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true))
+        }
+    }
+
+    @ViewBuilder func compatibleNavigationBarBackground(_ color: Color) -> some View {
+        if #available(iOS 16.0, *) {
+            toolbarBackground(color, for: .navigationBar).toolbarBackground(.visible, for: .navigationBar)
+        } else {
+            background(PresentationConfiguration(navigationColor: UIColor(color))
+                .frame(width: 0, height: 0).allowsHitTesting(false).accessibilityHidden(true))
+        }
+    }
+
+}
+
+struct CompatibleKeyboardScrollView<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        if #available(iOS 16.0, *) {
+            ScrollView { content }.scrollDismissesKeyboard(.interactively)
+        } else {
+            ScrollView {
+                content.background(KeyboardDismissalConfiguration().frame(width: 0, height: 0)
+                    .allowsHitTesting(false).accessibilityHidden(true))
+            }
+        }
+    }
+}
+
+private struct PresentationConfiguration: UIViewControllerRepresentable {
+    var sizes: [CompatibleSheetSize]? = nil
+    var showsGrabber: Bool? = nil
+    var navigationColor: UIColor? = nil
+
+    func makeUIViewController(context: Context) -> Reader {
+        let controller = Reader()
+        controller.view.backgroundColor = .clear
+        return controller
+    }
+
+    func updateUIViewController(_ controller: Reader, context: Context) {
+        controller.configuration = self
+        controller.configure()
+        DispatchQueue.main.async { [weak controller] in controller?.configure() }
+    }
+
+    final class Reader: UIViewController {
+        var configuration = PresentationConfiguration()
+
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            configure()
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            configure()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            configure()
+        }
+
+        func configure() {
+            var current: UIViewController? = self
+            while let controller = current {
+                if let sizes = configuration.sizes,
+                   let sheet = controller.presentationController as? UISheetPresentationController {
+                    sheet.detents = sizes.map(\.uiKit)
+                    if let value = configuration.showsGrabber { sheet.prefersGrabberVisible = value }
+                }
+                if let color = configuration.navigationColor, let navigation = controller.navigationController {
+                    let appearance = UINavigationBarAppearance()
+                    appearance.configureWithOpaqueBackground()
+                    appearance.backgroundColor = color
+                    navigation.navigationBar.standardAppearance = appearance
+                    navigation.navigationBar.scrollEdgeAppearance = appearance
+                    navigation.navigationBar.compactAppearance = appearance
+                }
+                current = controller.parent
+            }
+        }
+    }
+}
+
+private struct KeyboardDismissalConfiguration: UIViewRepresentable {
+    func makeUIView(context: Context) -> Reader { Reader() }
+    func updateUIView(_ view: Reader, context: Context) { view.configure() }
+
+    final class Reader: UIView {
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            configure()
+        }
+
+        func configure() {
+            DispatchQueue.main.async { [weak self] in
+                var current = self?.superview
+                while let view = current {
+                    if let scroll = view as? UIScrollView { scroll.keyboardDismissMode = .interactive; return }
+                    current = view.superview
+                }
+            }
+        }
+    }
+}
+
+struct CompatibleShareButton: View {
+    let title: String
+    let url: URL
+    @State private var isPresented = false
+
+    var body: some View {
+        Button(title) { isPresented = true }
+            .sheet(isPresented: $isPresented) { ShareController(url: url) }
+    }
+
+    private struct ShareController: UIViewControllerRepresentable {
+        let url: URL
+        func makeUIViewController(context: Context) -> UIActivityViewController {
+            UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        }
+        func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
+    }
+}

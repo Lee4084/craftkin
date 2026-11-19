@@ -7,7 +7,7 @@ struct LibraryHomeView: View {
     var onOpenProfile: () -> Void = {}
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
                 LibraryHeader(
                     title: coordinator.skills.isEmpty ? "Every skill starts\nwith a story." : "Keep their\nknow-how alive.",
@@ -26,7 +26,6 @@ struct LibraryHomeView: View {
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
-        .scrollIndicators(.hidden)
     }
 }
 
@@ -87,7 +86,7 @@ private struct PopulatedLibraryContent: View {
                     LinearGradient(colors: [.clear, .black.opacity(0.78)], startPoint: .center, endPoint: .bottom)
                     VStack(alignment: .leading, spacing: 8) {
                         Text("CONTINUE LEARNING").font(.caption.weight(.bold)).tracking(1.2)
-                        Text(featured.title).font(.system(.title, design: .serif, weight: .bold))
+                        Text(featured.title).font(.system(.title, design: .serif).weight(.bold))
                         Text("\(featured.completedSteps) of \(featured.stepCount) steps").font(.headline)
                         ProgressView(value: Double(featured.completedSteps), total: Double(featured.stepCount))
                             .tint(EchoTheme.terracottaLight)
@@ -108,7 +107,7 @@ private struct PopulatedLibraryContent: View {
                     .font(.title2).foregroundStyle(.white)
                     .frame(width: 56, height: 56).background(EchoTheme.terracotta).clipShape(Circle())
                 VStack(alignment: .leading) {
-                    Text("Record a Skill").font(.system(.title3, design: .serif, weight: .bold))
+                    Text("Record a Skill").font(.system(.title3, design: .serif).weight(.bold))
                     Text("Film it. Turn it into a lesson.").foregroundStyle(EchoTheme.secondaryInk)
                 }
                 Spacer()
@@ -164,7 +163,7 @@ private struct EmptyLibraryContent: View {
         .frame(height: 260)
 
         Text("Record a family member sharing something only they know.")
-            .font(.system(.title2, design: .serif, weight: .bold))
+            .font(.system(.title2, design: .serif).weight(.bold))
             .multilineTextAlignment(.center).frame(maxWidth: .infinity)
 
         Button("Record First Skill", action: onCapture)
@@ -174,7 +173,7 @@ private struct EmptyLibraryContent: View {
 
         Text("Ideas to begin").font(EchoTheme.title(29))
         LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 10) {
-            IdeaCard(title: "Family Recipes", icon: "frying.pan.fill", color: EchoTheme.terracotta)
+            IdeaCard(title: "Family Recipes", icon: CompatibleSymbol.name("frying.pan.fill", fallback: "flame.fill"), color: EchoTheme.terracotta)
             IdeaCard(title: "Home Repairs", icon: "hammer.fill", color: EchoTheme.sage)
             IdeaCard(title: "Handmade Crafts", icon: "scissors", color: .orange)
             IdeaCard(title: "Traditions", icon: "house.fill", color: .blue.opacity(0.7))
@@ -212,8 +211,8 @@ struct SkillGridCard: View {
                 Image(skill.coverImageName).resizable().scaledToFill().frame(height: 112).clipped()
                 VStack(alignment: .leading, spacing: 4) {
                     Text(skill.title)
-                        .font(.system(.headline, design: .serif, weight: .bold))
-                        .lineLimit(2, reservesSpace: true)
+                        .font(.system(.headline, design: .serif).weight(.bold))
+                        .compatibleLineLimit(2, reservesSpace: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text("\(skill.maker.relation) · \(skill.stepCount) steps")
                         .font(.caption).foregroundStyle(EchoTheme.secondaryInk)

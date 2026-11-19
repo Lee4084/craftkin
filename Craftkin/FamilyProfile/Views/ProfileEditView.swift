@@ -1,11 +1,9 @@
-import PhotosUI
 import SwiftUI
 
 struct ProfileEditView: View {
     @ObservedObject var coordinator: FamilyProfileCoordinator
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
-    @State private var selection: PhotosPickerItem?
     @State private var photoData: Data?
     @State private var removesPhoto = false
     @State private var isLoading = false
@@ -23,11 +21,19 @@ struct ProfileEditView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        CompatibleNavigation {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
                     VStack(spacing: 14) {
-                        PhotosPicker(selection: $selection, matching: .images) {
+                        PhotoLibraryButton(kind: .images, isLoading: $isLoading, onStart: { errorMessage = nil }, onPick: { media in
+                            guard case .image(let data) = media else { throw ProfilePhotoError.invalidImage }
+                            let jpeg = try ProfilePhotoProcessor.jpeg(from: data)
+                            try Task.checkCancellation()
+                            photoData = jpeg
+                            removesPhoto = false
+                        }, onError: { error in
+                            errorMessage = error.localizedDescription
+                        }) {
                             VStack(spacing: 12) {
                                 Group {
                                     if let photoData, let image = UIImage(data: photoData) {
@@ -52,7 +58,6 @@ struct ProfileEditView: View {
                             Button("Use Default Photo") {
                                 photoData = nil
                                 removesPhoto = true
-                                selection = nil
                                 errorMessage = nil
                             }.font(.subheadline)
                         }
@@ -94,24 +99,7 @@ struct ProfileEditView: View {
                 }
             }
             .tint(EchoTheme.terracotta)
-            .task(id: selection) {
-                guard let selection else { return }
-                isLoading = true
-                errorMessage = nil
-                defer { isLoading = false }
-                do {
-                    guard let data = try await selection.loadTransferable(type: Data.self) else { throw ProfilePhotoError.invalidImage }
-                    try Task.checkCancellation()
-                    let jpeg = try ProfilePhotoProcessor.jpeg(from: data)
-                    try Task.checkCancellation()
-                    photoData = jpeg
-                    removesPhoto = false
-                } catch is CancellationError {
-                    // Dismissing the editor/picker never changes the stored profile.
-                } catch {
-                    errorMessage = (error as? ProfilePhotoError)?.errorDescription ?? "This photo could not be opened. Choose another image."
-                }
-            }
+
         }
     }
 }

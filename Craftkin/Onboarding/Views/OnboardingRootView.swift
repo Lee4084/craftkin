@@ -77,10 +77,9 @@ private struct WelcomeView: View {
             }
             .buttonStyle(EchoPrimaryButtonStyle())
 
-            Button("I have an invite", action: coordinator.openInvite)
+            Button(action: coordinator.openInvite) { Text("I have an invite").underline() }
                 .font(.headline)
                 .foregroundStyle(EchoTheme.sage)
-                .underline()
                 .frame(maxWidth: .infinity, minHeight: 44)
 
             EchoPageDots(selected: 0)
@@ -179,7 +178,7 @@ private struct HowStepCard: View {
                     .font(.title3)
             }
             Text(step.title)
-                .font(.system(.title3, design: .serif, weight: .bold))
+                .font(.system(.title3, design: .serif).weight(.bold))
                 .foregroundStyle(EchoTheme.ink)
             Text(step.detail)
                 .font(.subheadline)
@@ -244,14 +243,13 @@ private struct PrivacyView: View {
             Button("Set Up My Space", action: coordinator.setUpMySpace)
                 .buttonStyle(EchoPrimaryButtonStyle())
 
-            Button("Learn about privacy") { showsPrivacyDetails = true }
+            Button { showsPrivacyDetails = true } label: { Text("Learn about privacy").underline() }
                 .font(.headline)
-                .underline()
                 .frame(maxWidth: .infinity, minHeight: 44)
         }
         .sheet(isPresented: $showsPrivacyDetails) {
             PrivacyDetailsView()
-                .presentationDetents([.medium, .large])
+                .compatibleSheet([.medium, .large])
         }
     }
 }
@@ -267,7 +265,7 @@ private struct PrivacyRow: View {
             EchoFeatureIcon(systemName: icon, color: color)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(.headline, design: .serif, weight: .bold))
+                    .font(.system(.headline, design: .serif).weight(.bold))
                     .foregroundStyle(EchoTheme.ink)
                 Text(detail)
                     .font(.subheadline)
@@ -282,9 +280,9 @@ private struct PrivacyDetailsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        CompatibleNavigation {
             List {
-                Section(IntegrationConstants.Text.legal) { LegalDocumentLinks() }
+                Section("Legal") { LegalDocumentLinks() }
                 Section("Storage") {
                     Label("Lessons stay local until you choose a Family Space.", systemImage: "iphone")
                     Label("A future sync service will disclose its storage location before upload.", systemImage: "icloud")
@@ -294,7 +292,7 @@ private struct PrivacyDetailsView: View {
                     Label("EchoSkill never publishes family recordings publicly.", systemImage: "eye.slash")
                 }
                 Section("Invitations and control") {
-                    Label("Only people you invite can enter a Family Space.", systemImage: "person.2.badge.key")
+                    Label("Only people you invite can enter a Family Space.", systemImage: CompatibleSymbol.name("person.2.badge.key", fallback: "person.badge.key"))
                     Label("Export and deletion controls will live in Settings.", systemImage: "square.and.arrow.up")
                 }
             }
@@ -329,7 +327,7 @@ private struct FamilySpaceChoiceView: View {
             }
 
             FamilyChoiceCard(
-                icon: "house.and.flag.fill",
+                icon: CompatibleSymbol.name("house.and.flag.fill", fallback: "house.fill"),
                 title: "Create a Family Space",
                 subtitle: "Start a new private library and invite family later.",
                 accent: EchoTheme.terracotta,
@@ -340,7 +338,7 @@ private struct FamilySpaceChoiceView: View {
             }
 
             FamilyChoiceCard(
-                icon: "envelope.badge.person.crop.fill",
+                icon: CompatibleSymbol.name("envelope.badge.person.crop.fill", fallback: "envelope.fill"),
                 title: "Join with an Invite",
                 subtitle: "Use a link or invitation code from a family member.",
                 accent: EchoTheme.sage,
@@ -349,10 +347,9 @@ private struct FamilySpaceChoiceView: View {
                 isCloudAvailable ? coordinator.openJoinSpace() : (showsCloudExplanation = true)
             }
 
-            Button("Set up later", action: coordinator.setUpLater)
+            Button(action: coordinator.setUpLater) { Text("Set up later").underline() }
                 .font(.headline)
                 .foregroundStyle(EchoTheme.terracotta)
-                .underline()
                 .frame(maxWidth: .infinity, minHeight: 44)
 
             Label(
@@ -394,7 +391,7 @@ private struct FamilyChoiceCard: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(title)
-                        .font(.system(.title3, design: .serif, weight: .bold))
+                        .font(.system(.title3, design: .serif).weight(.bold))
                         .foregroundStyle(EchoTheme.ink)
                     Text(subtitle)
                         .font(.subheadline)

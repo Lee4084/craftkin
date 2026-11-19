@@ -1,0 +1,19 @@
+独立 H5 Mock 手机测试站
+
+用户要求部署以便手机测试。新建 Cloudflare Pages 项目 craftkin-mock，使用已有本机授权账户。
+固定入口：https://craftkin-mock.pages.dev/start?consent=app&debug=1&mock=legal
+活动入口：https://craftkin-mock.pages.dev/start?consent=app&debug=1&mock=activity
+
+dev/export_preview.py 将 public/ 复制到临时目录，并只向副本注入模拟控件、标识和固定活动页。
+本地脚本继续只允许 loopback；导出脚本替换为独立测试项目及其预览子域的精确主机范围。
+原始 public/、现有 craftkin 部署及 iOS 启动 URL 均未修改。
+Mock 仅使用固定分支和示例内容；不模拟业务网络成功、不使用真实身份和 Token，不保存活动缓存。
+真实接口选项跳回现有线上正常调试页。没有向提审 App 提供远程覆盖策略的开关。
+测试站响应 Cache-Control: no-store、X-Robots-Tag: noindex, nofollow；根路径跳到显式 Mock 调试入口。
+
+验证：本地生成脚本与 JavaScript 语法、git diff --check 通过。临时 VM 检查协议、活动、默认分支、真实入口、主站禁止启用 Mock、等待继续后路由、MOCK 标识与无网络摘要行为通过。
+未运行 iOS App 或模拟器；独立测试站仅供浏览器页面联调，不能证明原生回调链路已通过。
+
+部署成功：https://22848652.craftkin-mock.pages.dev （main，22848652-8acd-4e59-bc21-71e74b735b89）。
+线上 curl 检查：固定域名 start、Mock 脚本、样式、协议页和活动页均成功返回，内容与导出文件一致；根路径 302 跳转正确，活动 .html 的 308 跳转保留 mock=activity。
+响应 no-store/noindex 已核对。新域名刚发布时曾出现 522/TLS 失败，随后重新检查上述资源正常。未进行手机视觉和实际点击验收。

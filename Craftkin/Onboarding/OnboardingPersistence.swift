@@ -4,14 +4,6 @@ protocol OnboardingCompletionStoring: AnyObject {
     var completion: OnboardingCompletion? { get set }
 }
 
-final class InMemoryOnboardingCompletionStore: OnboardingCompletionStoring {
-    var completion: OnboardingCompletion?
-
-    init(completion: OnboardingCompletion? = nil) {
-        self.completion = completion
-    }
-}
-
 final class UserDefaultsOnboardingCompletionStore: OnboardingCompletionStoring {
     private let defaults: UserDefaults
     private let key: String
@@ -39,4 +31,3 @@ final class UserDefaultsOnboardingCompletionStore: OnboardingCompletionStoring {
         defaults.removeObject(forKey: key)
     }
 }
-

@@ -1,0 +1,16 @@
+恢复固定 /start 入口，当前保持纯静态协议
+
+用户澄清活动仍在筹备，希望网站部署可以独立更新，不因页面内容变化修改原生 URL。
+撤回上一轮将原生入口改为 /terms 的变更。
+LegalDocument.startupURL 恢复原值 https://craftkin.pages.dev/start?debug=1。
+现有 acceptanceURL 继续添加 consent=app；网站当前仍部署 static-public/，/start 与 /start.html 经 302 到静态协议。
+静态站没有活动接口请求或调试脚本，保留固定在底部的 Agree and continue。
+原始活动 H5 仍保留在 public/，本次不修改其接口配置、分支、缓存或原生交互。
+
+这次修正只恢复入口，不新增开关、不绕过同意记录、不清理用户数据。
+已同意协议的设备仍按原有设计直接进入原生首页，未来仅重新部署网站不会让这些设备自动加载 H5。
+后续内容是否适合网页更新仍取决功能范围和平台要求；本次没有实现审核识别或不同用户展示隐藏功能的机制。
+
+发布：https://89453b13.craftkin.pages.dev，静态文件内容与上次发布一致。
+Debug 通用 iOS 设备无签名编译通过；保留的活动源码哈希与清单一致，git diff --check 通过。
+线上固定入口 /start?debug=1&consent=app 返回 302，最终为静态 terms 页面，含固定同意按钮、不引用活动脚本。未运行 App 或模拟器。

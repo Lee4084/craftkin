@@ -1,0 +1,30 @@
+.debug-window { position: fixed; z-index: 10000; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom))); overflow: hidden; display: flex; flex-direction: column; color: #1f1b18; background: #fffefb; border: 1px solid #c5bcb3; border-radius: 16px; box-shadow: 0 12px 48px #1f1b1833; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.debug-window[hidden], .debug-window [hidden] { display: none !important; }
+.debug-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 12px 4px 16px; background: #f7e2da; flex-shrink: 0; }
+.debug-body { padding: 12px 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.debug-hint { margin: 8px 0; color: #67625e; font-size: 12px; overflow-wrap: anywhere; }
+.debug-config { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 6px 12px; margin: 12px 0; }
+.debug-config dt { color: #67625e; }
+.debug-config dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, monospace; }
+.debug-label { display: block; margin: 12px 0 4px; font-weight: 600; }
+.debug-copy-row { display: flex; align-items: center; gap: 8px; }
+.debug-window input { min-width: 0; flex: 1; width: 100%; height: 44px; border: 1px solid #c5bcb3; border-radius: 8px; padding: 8px; background: #fbf8f2; color: #1f1b18; font: 13px ui-monospace, SFMono-Regular, monospace; -webkit-user-select: text; user-select: text; }
+.debug-window button { min-height: 44px; min-width: 44px; border: 1px solid #b49a8e; border-radius: 8px; padding: 8px 12px; background: #fffefb; color: #8c301b; font: inherit; font-weight: 600; cursor: pointer; }
+.debug-window button:disabled { opacity: .5; cursor: default; }
+.debug-window button:focus-visible, .debug-window input:focus-visible { outline: 3px solid #a43d23; outline-offset: 2px; }
+.debug-section-title { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; gap: 8px; }
+.debug-requests { padding: 0; margin: 8px 0; list-style: none; }
+.debug-requests li { padding: 10px 0; border-bottom: 1px solid #ded7ce; }
+.debug-requests code { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.debug-requests span { display: block; margin-top: 4px; color: #526a53; font-size: 12px; }
+.debug-request-failed span, .debug-error { color: #a43d23; }
+.debug-actions { display: grid; gap: 8px; margin-top: 16px; }
+.debug-actions button:last-child { color: #fff; background: #a43d23; border-color: #a43d23; }
+.debug-copy-fallback { position: fixed; width: 1px; height: 1px; opacity: 0; }
+.debug-request-details > summary { min-height: 44px; padding: 4px 0; cursor: pointer; color: #1f1b18; }
+.debug-request-details > summary:focus-visible { outline: 3px solid #a43d23; outline-offset: 2px; border-radius: 4px; }
+.debug-request-content { padding: 8px 0 4px; }
+.debug-request-content > code { padding: 8px; background: #fbf8f2; border-radius: 6px; }
+.debug-request-content h4 { font-size: 12px; margin: 16px 0 6px; color: #45403c; }
+.debug-request-content pre { max-height: 360px; overflow: auto; padding: 10px; margin: 0; background: #fbf8f2; border: 1px solid #ded7ce; border-radius: 8px; color: #1f1b18; font: 12px/1.6 ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+.debug-request-content button { width: 100%; margin-top: 12px; }

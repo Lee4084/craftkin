@@ -1,0 +1,115 @@
+后续修正记录（2026-11-19）：
+根据用户要求，已将隐私政策精简为 8 节、服务协议精简为 7 节，清除占位信息并修正持久化存储说明；所有现行协议页面及原生联系邮箱已统一为 EchoSkillContact@outlook.com。
+静态站已重新部署：https://caccf7a3.craftkin.pages.dev。
+下文是修改前的审查快照，其中第 1 项法律文本问题已处理；其他功能承诺、根入口和未来活动问题不因本次文本修改而自动解决。
+
+Craftkin / EchoSkill 提审与后续活动检查
+日期：2026-11-19
+范围：本地 Craftkin iOS 工程、当前 Cloudflare 静态站、保留的活动 H5 源码。
+结论：建议先处理下面的当前问题再提审。未来可以维持同一个配置 URL，但现状不能保证“原样重新部署活动目录就能正常上线”。
+本次仅审查并新增本文，未修改 App 实现、未部署、未提交 Git。
+
+一、当前提审应优先处理
+
+1. 高：线上协议有模板占位信息，部分隐私说明与代码冲突。
+证据：codex/legal/Privacy Policy.txt:15、17、18、27、31、34、35、39；Terms of Service.txt:15、27、29。
+线上 /privacy 有 16 个不同占位项，/terms 有 4 个；例如生产域名、线上服务主体、用途、保留期限、删除渠道及收费情况。
+隐私政策第 17 行写 WebView 使用 nonpersistent 数据存储，实际 Craftkin/Legal/LegalConsentWebView.swift:21 使用 .default()，会持久保存网站数据。
+第 34 行把活动入口材料描述成保存在 Keychain；现有实现中安装标识在 Keychain，活动会话入口在网站 localStorage。
+建议：按当前实际服务填写、修正并重新生成部署。未确定的公司身份、用途、保留期限不可代为编造；核对现有运营主体和两个联系邮箱是否准确。
+政策依据：Apple 2.1、5.1.1。链接见文末。
+
+2. 高：界面承诺的部分能力与实际实现不一致。
+Craftkin/ContentView.swift:19 把 isCloudAvailable 固定设为 true；Onboarding/Views/OnboardingRootView.swift:356 提示可在 Apple 设备间同步。
+实际创建/加入家庭只保存本机 onboarding 状态（Onboarding/OnboardingCoordinator.swift），未发现对应云同步实现。
+同一 onboarding 的第 229、291 行介绍 AI 草稿；实际 Capture/CaptureCoordinator.swift:114 起，对真实视频生成待用户编辑的空转写与空步骤，并不自动识别内容。
+FamilyProfile/FamilyProfileCoordinator.swift:183 起的通知和 AI 开关只保存设置；本次源码搜索未发现通知权限申请或通知调度。
+建议：按已完成的本地编辑和存储能力真实呈现，或完成所承诺的服务后发布。仅在协议中说明限制，不能消除操作界面的误导。
+以上是具体承诺与实现不一致，不代表本地处理必须使用远程 AI，也不代表该 App 只有网页壳。
+政策依据：Apple 2.1、2.3。
+
+3. 中：固定根入口与同意按钮的呈现脱节。
+Craftkin/Legal/LegalDocument.swift:7 当前唯一启动配置是 https://craftkin.pages.dev；原生附加 consent=app。
+线上 / 和 /?consent=app 都返回协议目录页，index.html 没有 app-consent 面板。consent.js 找不到面板便退出。
+用户必须先点击 Privacy Policy 或 Terms of Service 才能看到固定的 Agree and continue；不是打不开 App，但首次流程多一步，且根页没有清楚的继续入口。
+当前 /start 会转到 /terms?consent=app，但原生已不再从 /start 进入。
+建议：静态阶段在站点侧让 App 根入口抵达可同意的协议页，保持原生 URL 不变。
+
+二、未来活动上线：已确认的技术限制
+
+4. 高：直接原样部署 public/，根入口仍不会启动活动。
+保留活动逻辑位于 codex/legal/site/public/start.html、startup.js、activity-api.js；public/index.html 仍是协议目录。
+build_site.py 也分别生成目录首页和 /start，没有把根页面转到活动加载流程。
+此外 LegalConsentWebView.swift:68–78 的 privacyAndTerms 原生消息只接受 /start 或 /start.html 来源。仅将启动脚本搬到 /，消息仍会被拒绝。
+建议的站点处理：未来让根入口转到 /start?consent=app，保留查询参数与合法同意页面，沿用已存在的回调路径；发布前从原生配置的根 URL 完整验证。这样无需为了路径本身改原生配置。
+这是方案建议，本次没有修改或部署。
+
+5. 高：同意过的老用户不会自动看到后来上线的活动。
+Craftkin/Legal/AppEntryView.swift:19、22–26：legal.acceptedVersion 命中后直接进入 ContentView，不加载任何启动网页。
+重新部署 Cloudflare 不会改变这条本机分支。若希望已有用户也参与，需要设计明确的活动入口及必要的原生版本更新，不能假定远程重新部署覆盖所有用户。
+保留活动 H5 的 activity-api.js:263、318 起，活动缓存命中直接跳活动，跳过配置、认证、策略请求；没有按时间失效机制。策略变更、活动结束或紧急撤回可能无法及时影响这些用户。
+应制定活动入口、结束、会话失效和缓存更新规则，并验证旧会话的客服 Token 更新。不要用重置同意记录或识别审核人员来代替正常生命周期管理。
+
+6. 高（上线前）：保留活动源码仍是测试配置。
+activity-api.js:7–12 包含 test-app.dirtan.work、com.huankecontact.test、xttest、测试 IM / 日志服务；API 版本固定 1.0.2。
+已编译 App 营销版本为 1.0.0。这种版本差异本身不等于违规，但会影响后台策略匹配，必须明确两个版本字段的含义。
+需确认正式接口、包参数、动态路由字段和目标页面；同步更新 CSP connect-src 等站点配置，不能只改接口字符串。
+目标活动地址来自接口，并不必然仍在 Cloudflare 域名，目标服务的可用性、数据处理和第三方支付均需验证。
+
+7. 中（活动接入前）：任意页面导航与原生交互的信任边界需重新确认。
+活动通过 go:// 支持内外打开页面、设置、常亮、关闭、手势、Token 更新和客服。
+活动子框架也可能触发导航指令；初始 privacyAndTerms 来源检查不等于后续第三方页面获得同等检查。
+引入外部支付或第三方内容后，应核对哪个页面可发哪些指令、会话信息是否进入 URL/日志、关闭与取消是否正确。当前开放跳转是既有产品要求，本次没有擅自恢复导航白名单。
+这属于具体安全验证事项，不据此断言现有纯静态协议会被拒绝。
+
+三、未来活动上线：审核与数据边界（活动内容尚未提供）
+
+8. 普通内容维护与新增业务不能一概而论。
+沿用已披露功能的活动文案、图片、时间等维护，通常无需仅为内容改动重发原生包。
+若活动引入全新的主营业务、数字付费或线上账户，应先评估对应审核要求并提供可审查的功能说明；固定 URL 和 Cloudflare 托管不是审核豁免。
+Apple 2.3.1 要求具体说明可供审核的新功能，2.5.19 涉及隐藏或未披露功能。legalConsent1…8 命名及指令字符拼装并不能替代披露，也不能用于掩盖实际业务。
+保留字段 isReviewPkg 名称不直接证明服务端识别审核人员。本次无法看到服务端规则，应确认它仅用于正常业务开放，不按审核身份/IP等隐藏不同体验。
+网页展示本身不自动等于违规下载代码；若实际提供小程序/软件平台，还应另看 4.7。
+
+9. 支付必须按售卖内容和上架地区判断。
+免费展示/报名：核对实际数据、文案、年龄适宜性即可，仍需完整可用。
+实体商品或在 App 外消费的服务：适用 3.1.3(e) 的外部支付类别。
+数字会员、录播课程、充值币等 App 内消费权益：通常按 3.1.1 处理；美国店面外链及其他地区授权存在差异，不能直接把同一第三方收银页当作全球可用方案。
+现有原生仅提供打开/关闭网页，没有 StoreKit 购买与交易验证实现。支付卡片能呈现、能关闭，只证明页面交互，不证明支付规则及权益到账已完成。
+
+10. 活动上线前需要重新核实隐私申报和同意时机。
+保留的启动代码会先获取 IP，并调用 config → auth → strategy，发送安装标识、版本、语言/时区及会话字段，然后才可能显示协议。
+必须在真实数据处理发生前落实所需告知、选择或同意；不能默认后点 Agree 能覆盖此前所有传输。
+PrivacyInfo.xcprivacy 的 tracking=false、空 collectedDataTypes 不替代 App Store Connect 隐私标签。需按实际后台留存、第三方活动脚本和用途填写；不能只根据原生离线推断完全不收集数据。
+随机安装 UUID 并不自动要求 ATT；若跨公司关联数据用于广告或数据经纪，再按实际情况评估 ATT。
+活动若创建线上账户，现有本地删除不等于服务端账户删除。AccountDeletionView 中 Delete My Account 目前禁用；当前没有真实线上账户创建，不能仅凭这个禁用按钮断言违反账户删除条款。
+活动若提供面向他人的发帖/评论/聊天，还需另评估举报、屏蔽、内容管理和年龄要求；本次未把未来假设当成当前缺陷。
+
+四、验证与边界
+
+已验证：
+- 本次 curl 实测 /、/?consent=app、/terms、/privacy 为 HTTP 200，内容与 static-public 对应文件相同。线上当前为纯静态法律页面，不加载 activity-api.js/startup.js。
+- 当前静态 CSP 的 connect-src 为 none；活动源码留在 codex/，不作为 App 运行资源打包。
+- 本轮 iOS 15.6 适配已有 Debug、Release 无签名构建成功记录，编译产物 MinimumOSVersion 为 15.6；本次未改实现，未重复编译。
+- 相机/麦克风用途说明存在；照片选择使用系统 PHPicker，不能仅因没有完整图库用途键就判错。
+- 隐私清单实际入包，含 UserDefaults 所需理由；不等于已核实 ASC 标签。
+- 当前 git diff --check 无错误。
+- Python urllib 本次访问根地址得到一次 403，curl 对上述四个地址均成功。该结果未定位为手机端故障，仍需用户真机网络验收。
+
+未验证：
+- 未启动模拟器、未在真机运行，未实际体验 iOS 15.6 UI、音视频或第三方支付。
+- 未检查 App Store Connect 当前填写的隐私标签、年龄分级、截图、审核备注、销售地区、出口合规答案。
+- 无签名 build 不等于发布签名 Archive；尚未验证上传与分发签名。
+- 无服务端策略/正式活动实现，无法确认账户、订单、服务端回调、日志保留及所有目标域名行为。
+
+建议处理顺序：补全与修正当前法律文本 → 校准未实现能力的界面承诺 → 修复根入口首次流程 → 真机验收与发布 Archive/ASC 核对。筹备活动时，再处理根入口接入、老用户触达、缓存失效、正式配置及实际业务合规。
+
+官方依据（2026-11-19 查阅）：
+Apple App Review Guidelines（重点 2.1、2.3.1、2.5.19、3.1、4.7、5.1）：
+https://developer.apple.com/app-store/review/guidelines/
+Apple App Privacy Details：
+https://developer.apple.com/app-store/app-privacy-details/
+Apple User Privacy and Data Use：
+https://developer.apple.com/app-store/user-privacy-and-data-use/
+
+本报告为代码和已访问网页的发布检查，不能保证审核结果，也不替代未知实际业务所需的专业意见。

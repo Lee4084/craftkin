@@ -116,8 +116,7 @@ struct LessonQuestionAnswerView: View {
             }
 
             LearnCard {
-                TextField("Ask about a step or family tip", text: $coordinator.questionText, axis: .vertical)
-                    .lineLimit(2...4)
+                CompatibleMultilineField("Ask about a step or family tip", text: $coordinator.questionText, lines: 2...4)
                     .accessibilityLabel("Lesson question")
                 Button("Ask Lesson", action: coordinator.submitQuestion)
                     .buttonStyle(EchoPrimaryButtonStyle())
@@ -145,24 +144,17 @@ struct PracticeSubmissionView: View {
                     Label(coordinator.practice.mediaKind == .photo ? "Photo ready" : "\(Int(coordinator.practice.mediaDuration ?? 0))-second video ready", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(EchoTheme.sage)
                 } else {
-                    Image(systemName: "photo.badge.plus")
+                    Image(systemName: CompatibleSymbol.name("photo.badge.plus", fallback: "photo.on.rectangle"))
                         .font(.system(size: 46))
                         .foregroundStyle(EchoTheme.terracotta)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 24)
                 }
                 PracticeMediaPicker(coordinator: coordinator)
-                if ProcessInfo.processInfo.arguments.contains("-uiTesting") { HStack {
-                    Button("Use Sample Photo", action: coordinator.choosePracticePhoto)
-                    Spacer()
-                    Button("Use Sample Video") { coordinator.choosePracticeVideo() }
-                }
-                .font(.subheadline.weight(.semibold))
-                }
+
             }
 
-            TextField("Add a note about your practice (optional)", text: $coordinator.practice.note, axis: .vertical)
-                .lineLimit(3...6)
+            CompatibleMultilineField("Add a note about your practice (optional)", text: $coordinator.practice.note, lines: 3...6)
                 .padding(15)
                 .background(EchoTheme.paper)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))

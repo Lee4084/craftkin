@@ -1,0 +1,17 @@
+移除协议 WebView 的地址限制
+
+用户要求删除 LegalDocument.swift 中“允许在协议 WebView 内打开的地址校验”。
+删除 allowsEmbeddedNavigation 及所有导航调用；LegalDocument 仅保留文档类型、标题、网站/启动/联系 URL 配置。
+协议 WebView 的 HTTP/HTTPS 网页、跳转及子 frame 不再限制域名或路径；新窗口请求在当前 WebView 加载。
+复用既有导航分派区分 WebKit 网页与系统外部链接：普通网页留在 WebView，外部 scheme 交 UIApplication.open。
+保留 about:blank、内置离线 file 页面；移除主页面的地址及 text/html 类型限制，网络失败仍按原错误流程处理。
+加载成功直接进入 ready，不再根据地址白名单切为失败。活动容器原有行为不变。
+
+JS 原生消息的来源校验单独由 LegalConsentBridge.canReceiveMessage 负责，不用于拦截导航。
+同意仍需来自协议主页面、加载完成、agree 动作和正确协议版本；启动身份/打开活动的消息仍需匹配启动消息格式。
+来自其它域名的页面可以正常显示，但不会取得 Keychain 安装标识或写入协议同意记录。
+
+未修改 H5、部署配置、同意缓存或设备标识；本次为原生代码修改，需要重新编译运行 App。
+
+验证：Debug 通用 iOS 设备无签名编译通过；临时 Swift 检查确认线上/离线协议同意有效，其他来源、子 frame、未加载完成及重复 consent 参数不能写入同意。
+源码无 allowsEmbeddedNavigation 或导航 allowsPage 白名单残留，git diff --check 通过。未运行 App 或模拟器，任意网页跳转的手机实际效果待用户验收。

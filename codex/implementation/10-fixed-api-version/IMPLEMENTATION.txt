@@ -1,0 +1,7 @@
+接口版本固定 1.0.2
+
+用户要求将上送版本固定为 1.0.2。修改 H5 config.version，config/auth/strategy 的加密请求体 http_headers.ver 统一取 1.0.2；活动与客服密文中的 i 也取同值。config 业务参数 ver:0 是配置修订号，按示例保留。
+旧活动缓存解密后仅更新 payload.i 并重新加密，同时更新匹配的客服 URL；保持原 Token、User ID、Keychain ID、缓存键和 cv=2，缓存迁移不新增请求。Token 更新也固定写入 i=1.0.2。
+本次不改 iOS 工程营销版本，原生无需重新编译。H5 资源版本 craftkin-version-102-6，已部署 https://78312bda.craftkin.pages.dev 。
+临时检查通过：固定请求版本、旧活动/客服缓存无网络迁移、Token 更新保留新版本。使用已有联调身份实际请求三接口，三个请求的 http_headers.ver 均为 1.0.2，均 HTTP 200；该联调身份策略返回 isReviewPkg:true，结果 legal。这不是用户手机本次请求的替代证据。
+线上 start 和 activity-api 脚本已检查 HTTP 200 并与本地字节一致。手机使用时重新打开启动页，调试窗口点“清活动缓存并重请求”以核对实际三接口；命中缓存仍按原要求跳过接口。

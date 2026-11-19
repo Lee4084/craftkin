@@ -6,14 +6,6 @@ protocol FamilyProfileStateStore {
     func delete() throws
 }
 
-final class InMemoryFamilyProfileStore: FamilyProfileStateStore {
-    private var value: FamilyProfileState?
-    init(seed: FamilyProfileState? = nil) { value = seed }
-    func load() throws -> FamilyProfileState? { value }
-    func save(_ state: FamilyProfileState) throws { value = state }
-    func delete() throws { value = nil }
-}
-
 final class UserDefaultsFamilyProfileStore: FamilyProfileStateStore {
     private let defaults: UserDefaults
     private let key = "echoskill.familyProfile.v1"

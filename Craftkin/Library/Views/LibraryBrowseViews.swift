@@ -7,7 +7,7 @@ struct AllSkillsView: View {
     private let columns = [GridItem(.flexible()), GridItem(.flexible())]
 
     var body: some View {
-        ScrollView {
+        ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 16) {
                 LibraryBackButton(title: "Library", action: coordinator.goBack)
                 Text("All Skills").font(EchoTheme.title(42)).accessibilityAddTraits(.isHeader)
@@ -57,7 +57,7 @@ struct AllSkillsView: View {
                 }
 
                 if coordinator.visibleSkills.isEmpty {
-                    ContentUnavailableView(
+                    CompatibleEmptyState(
                         "No skills match these filters",
                         systemImage: "line.3.horizontal.decrease.circle",
                         description: Text("Clear filters to see your whole Family Space.")
@@ -74,11 +74,9 @@ struct AllSkillsView: View {
             }
             .padding(.horizontal, 18).padding(.top, 8).padding(.bottom, 28)
         }
-        .scrollIndicators(.hidden)
         .sheet(isPresented: $showsFilters) {
             LibraryFilterSheet(coordinator: coordinator, isPresented: $showsFilters)
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .compatibleSheet([.large], showsGrabber: true)
         }
     }
 }
@@ -89,7 +87,7 @@ struct LibrarySearchView: View {
     @FocusState private var searchFocused: Bool
 
     var body: some View {
-        ScrollView {
+        CompatibleKeyboardScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 EchoEyebrow(text: "Library")
                 Text("Search Library").font(EchoTheme.title(42)).accessibilityAddTraits(.isHeader)
@@ -148,11 +146,10 @@ struct LibrarySearchView: View {
             }
             .padding(.horizontal, 18).padding(.top, 12).padding(.bottom, 28)
         }
-        .scrollDismissesKeyboard(.interactively)
         .onAppear { searchFocused = true }
         .sheet(isPresented: $showsFilters) {
             LibraryFilterSheet(coordinator: coordinator, isPresented: $showsFilters)
-                .presentationDetents([.large]).presentationDragIndicator(.visible)
+                .compatibleSheet([.large], showsGrabber: true)
         }
     }
 }
@@ -209,7 +206,7 @@ private struct SearchResultCard: View {
                 Image(skill.coverImageName).resizable().scaledToFill().frame(width: 112, height: 118).clipped()
                     .clipShape(RoundedRectangle(cornerRadius: 14))
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(skill.title).font(.system(.title3, design: .serif, weight: .bold)).lineLimit(2)
+                    Text(skill.title).font(.system(.title3, design: .serif).weight(.bold)).lineLimit(2)
                     Text("\(skill.maker.relation) · \(skill.stepCount) steps")
                         .font(.subheadline).foregroundStyle(EchoTheme.sage)
                     Text(skill.transcript).font(.subheadline).foregroundStyle(EchoTheme.secondaryInk).lineLimit(2)

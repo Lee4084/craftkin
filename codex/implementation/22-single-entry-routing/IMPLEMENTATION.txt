@@ -1,0 +1,17 @@
+统一启动去向，删除原生直达协议分支和 debug 参数
+
+用户要求：进入过原生 A 面后，后续启动一直进入 A 面；否则只打开固定网站入口。去掉 debug=1。
+AppEntryView 已有的 UserDefaults 同意结果继续作为当前 A 面进入记录：H5 Agree and continue 回调后先保存，再显示原生 ContentView；下次启动直接进入原生。
+复用 legal.acceptedVersion / craftkin-legal-v1，不新增一套重复状态，不在未同意时自动写入。
+
+LegalDocument.startupURL 改为 https://craftkin.pages.dev/start。
+LegalConsentView 删除 showsLegalDirectly 和 terms/start 的条件选择；pageURL 总是从 startupURL 构造。
+首次加载、关闭活动后返回、失败重试均使用同一个 /start 路径；不再由原生决定直接显示 /terms。
+页面到底显示协议或其它内容由部署在该入口的 H5 负责。当前线上纯静态版通过 302 显示协议。
+consent=app 是保留的同意桥接参数；用户主动刷新活动时仍使用已有 refresh=1 刷新缓存机制，入口路径不变，不是业务分流。
+debug 源码保留在本地活动版本中，但 App URL 不再启用调试窗口。
+
+不清除同意记录、Keychain 或活动缓存，不修改 Cloudflare 当前静态页面及保留的活动 H5 源码。
+
+验证：Debug 通用 iOS 设备无签名编译通过；原生启动视图无 showsLegalDirectly、terms/start 条件或 restart(legal:) 残留，startupURL 无 debug=1。
+保留活动 H5 源码哈希复核一致，git diff --check 通过。未运行 App 或模拟器。

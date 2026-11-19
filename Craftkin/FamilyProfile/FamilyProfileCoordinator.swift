@@ -24,11 +24,11 @@ final class FamilyProfileCoordinator: ObservableObject {
         learningHistoryStore: (any LearningProgressStoring)? = nil,
         initialFamilyName: String? = nil,
         useExampleData: Bool = true,
-        mediaStore: LocalMediaStore = LocalMediaStore()
+        mediaStore: LocalMediaStore? = nil
     ) {
         self.store = store
         self.useExampleData = useExampleData
-        self.mediaStore = mediaStore
+        self.mediaStore = mediaStore ?? LocalMediaStore()
         self.learningHistoryStore = learningHistoryStore
         if let restored = try? store.load() {
             state = restored
@@ -55,7 +55,7 @@ final class FamilyProfileCoordinator: ObservableObject {
     var visibleActivity: [FamilyActivityEvent] {
         state.activities.filter(\.isSharedWithFamily).map { event in
             guard useExampleData, event.sourceID == nil, event.lessonID == nil else { return event }
-            // Exact legacy fixture signatures only; real events have source/lesson IDs.
+
             let lessonID: String
             switch (event.memberName, event.summary, event.kind, event.age, event.imageName) {
             case ("Emma Carter", "shared a practice for Grandma’s Apple Pie.", .sharedPractice, "2h ago", let image) where ["EchoHero", "EchoReview"].contains(image):

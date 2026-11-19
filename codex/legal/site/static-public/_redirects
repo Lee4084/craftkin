@@ -1,0 +1,6 @@
+/privacy-policy /privacy 301
+/terms-of-service /terms 301
+/user-agreement /terms 301
+
+/start /terms?consent=app 302
+/start.html /terms?consent=app 302

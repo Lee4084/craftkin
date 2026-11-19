@@ -17,7 +17,7 @@ struct ManageDataView: View {
                 Text("Media is embedded in the file. Save exports only to a location you trust.").font(.footnote)
                 Button("Prepare Export") { coordinator.prepareExport(includeMedia: includeMedia) }.buttonStyle(EchoSecondaryButtonStyle())
                 if let url = coordinator.exportURL {
-                    ShareLink("Save or Share Export", item: url).buttonStyle(EchoPrimaryButtonStyle())
+                    CompatibleShareButton(title: "Save or Share Export", url: url).buttonStyle(EchoPrimaryButtonStyle())
                 }
             }
             EchoEyebrow(text: "Remove")
@@ -84,7 +84,7 @@ struct HelpSupportView: View {
             Text("EchoSkill \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"))").font(.caption).frame(maxWidth: .infinity).foregroundStyle(EchoTheme.secondaryInk)
         }
         .sheet(isPresented: $showArticle) {
-            NavigationStack {
+            CompatibleNavigation {
                 ScrollView { Text(article(selectedTopic ?? "")).font(.body).padding(24).frame(maxWidth: .infinity, alignment: .leading) }
                     .navigationTitle(selectedTopic ?? "Help").navigationBarTitleDisplayMode(.inline)
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showArticle = false } } }

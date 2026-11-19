@@ -1,0 +1,26 @@
+Craftkin H5 调试窗口
+
+用户新要求：仅在调试模式显示网络请求、复制 User ID 等，便于核对分流。
+
+启用
+独立调试入口：https://craftkin.pages.dev/start?consent=app&debug=1
+debug=1 是 H5 显式开关，和 isReviewPkg 无关。原生只新增集中配置 startupURL，当前临时带 debug=1，需重新编译安装后在 App 内启用；没有恢复原生 DEBUG 分支、测试入口、日志或测试 Target。结束调试时删除 startupURL 的 debug 参数即可回到正常启动。
+已经同意协议的设备按原流程直接进原生，跳过 H5；浏览器单独打开时使用浏览器自身身份，不能据此当作 App 内的 Keychain 设备结果。
+
+功能
+- 显示接口域名、包名、版本、实际缓存命中、实际 isReviewPkg 布尔值及分流来源。
+- 显示 /cdn-cgi/trace 和 config/auth/strategy 的方法、路径、HTTP 状态、业务 code、耗时和成功/失败状态。
+- User ID、Device ID 可复制，也可复制网络摘要；剪贴板不可用时尝试文本选择复制，并提供手动复制提示。
+- 调试模式在结果生成后、原生打开/网页跳转前暂停，点击“继续”才进入协议或活动。源启动页在进入活动后会被原生隐藏，因此调试检查安排在跳转之前，不声称能监控远端活动网页或支付网页的全部网络请求。
+- “清活动缓存并重请求”只调用现有 forget(cacheKey)，保留网站安装标识及原生 Keychain。重新加载 refresh=1 后取得最新策略。
+- 缓存命中时明确显示本轮未请求策略，不能把缓存当成当前后台值；旧缓存没存 User ID 时提示重新请求获取。新活动缓存记录对应 User ID，Token 更新时保留该元数据。
+- 网络记录不包含 Authorization、Token、密码、密文、支付链接或公网 IP，不新增服务器日志/遥测。
+
+实现
+public/debug.js 与 debug.css 负责窗口；activity-api.js 只增加可选事件观察和 beforeRoute 暂停钩子，正常模式观察回调为空且不暂停。事件观察出错不影响启动。没有新增依赖。
+build_site.py 仅生成 public，本轮不 --sync-ios，以保留用户要求清理后的 iOS 内置资源；原生只改了启动 URL 配置和引用。
+资源版本 craftkin-debug-4；稳定域名的调试页面和 JS/CSS 已部署到 https://1beeac58.craftkin.pages.dev 。
+
+验证
+执行临时内存检查（不向仓库添加测试文件或 .log）：调试门控阻止提前原生打开、缓存零请求、User ID 缓存及 Token 更新、强制刷新命中 true 协议分支、事件观察异常隔离、调试关闭不创建窗口、DOM 复制与摘要脱敏、刷新 URL、继续与失败按钮状态均通过。
+node --check 通过；原生 App Debug 编译通过，没有运行模拟器或 App。线上 /start 和脚本/样式 HTTP 200，逐字节匹配当前本地版本。手机真实剪贴板和窗口尺寸仍需用户验收。

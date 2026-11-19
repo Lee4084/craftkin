@@ -1,0 +1,15 @@
+App 临时接入独立 Mock 测试站
+
+用户要求临时切换入口，在 App 内测试后恢复。
+Debug：LEGAL_STARTUP_URL = https://craftkin-mock.pages.dev/start?debug=1&mock=legal
+Release：LEGAL_STARTUP_URL = https://craftkin.pages.dev/start?debug=1
+Configuration/AppInfo.plist 的 LegalStartupURL 使用上述构建设置，LegalDocument 读取它；无配置时回退原真实入口。
+原有 acceptanceURL 继续追加 consent=app，网站地址和普通协议链接保持原值。
+
+仅当启动配置指向独立 Mock 域名时，原生允许该域名的启动/协议页及固定活动示例路径。
+Mock 模式启动暂不使用已有协议同意结果，以便每次重新运行都能看到调试页；同意后进入原有首页，但不写 UserDefaults。
+已有同意记录、Keychain 安装标识、真实活动缓存均未删除或覆盖。
+正式 Release 的启动和同意行为保持真实接口流程；没有添加原生日志、测试 Target 或注释。
+
+恢复：将 Xcode App target Debug 的 LEGAL_STARTUP_URL 改回 https://craftkin.pages.dev/start?debug=1 即可恢复原入口和原有同意缓存行为。
+Mock 活动为固定示例内容；用于验证页面分支，不能验证真实活动支付、Token 或音视频服务。

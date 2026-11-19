@@ -1,17 +1,9 @@
 import Foundation
 
-enum LibraryFixtureState: String, Equatable {
+enum LibraryContentState: String, Equatable {
     case empty
     case populated
 
-    static func launchState(arguments: [String]) -> Self {
-        guard let index = arguments.firstIndex(of: "-libraryFixture"),
-              arguments.indices.contains(index + 1),
-              let requested = Self(rawValue: arguments[index + 1]) else {
-            return .populated
-        }
-        return requested
-    }
 }
 
 enum SkillProgress: String, CaseIterable, Codable, Hashable {

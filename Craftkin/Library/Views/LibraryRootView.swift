@@ -9,32 +9,19 @@ struct LibraryRootView: View {
     private let publishedStore: UserDefaultsPublishedLessonStore
 
     init(repository: any SkillRepository, initialFamilyName: String? = nil, onResetApp: @escaping () -> Void = {}) {
-        let arguments = ProcessInfo.processInfo.arguments
         let publishedStore = UserDefaultsPublishedLessonStore()
         self.publishedStore = publishedStore
-        if arguments.contains("-resetPublishedLessons") {
-            try? publishedStore.deleteAll()
-        }
         let integratedRepository = IntegratedSkillRepository(
             base: repository,
             publishedDrafts: (try? publishedStore.load()) ?? []
         )
         let libraryCoordinator = LibraryCoordinator(repository: integratedRepository)
         let captureStore = UserDefaultsCaptureDraftStore()
-        if arguments.contains("-resetCapture") {
-            try? captureStore.delete()
-        }
         let captureCoordinator = CaptureCoordinator(store: captureStore)
         let learnStore = UserDefaultsLearningProgressStore()
-        if arguments.contains("-resetLearn") {
-            try? learnStore.delete()
-        }
         let learnCoordinator = LearnCoordinator(store: learnStore)
         let practiceArchive = UserDefaultsPracticeArchiveStore()
         let familyStore = UserDefaultsFamilyProfileStore()
-        if arguments.contains("-resetFamilyProfile") {
-            try? familyStore.delete()
-        }
         let familyCoordinator = FamilyProfileCoordinator(
             store: familyStore,
             learningHistoryStore: learnStore,
@@ -96,8 +83,7 @@ struct LibraryRootView: View {
         for progress in savedProgress { libraryCoordinator.apply(progress) }
         familyCoordinator.synchronizeLearningHistory(savedProgress)
         if let latest = savedProgress.first,
-           let skill = libraryCoordinator.skill(withID: latest.lessonID),
-           !arguments.contains("-resetLearn") {
+           let skill = libraryCoordinator.skill(withID: latest.lessonID) {
             let draft = ((try? publishedStore.load()) ?? []).first { $0.id == skill.id }
             let lesson = draft.map { IntegratedLessonFactory.learningLesson(from: $0) }
                 ?? IntegratedLessonFactory.learningLesson(from: skill)
@@ -106,32 +92,8 @@ struct LibraryRootView: View {
         _coordinator = StateObject(wrappedValue: libraryCoordinator)
         _captureCoordinator = StateObject(wrappedValue: captureCoordinator)
         _learnCoordinator = StateObject(wrappedValue: learnCoordinator)
-        if let routeIndex = arguments.firstIndex(of: "-familyRoute"), arguments.indices.contains(routeIndex + 1) {
-            switch arguments[routeIndex + 1] {
-            case "members": familyCoordinator.route = .members
-            case "invite": familyCoordinator.route = .inviteMember
-            case "permissions":
-                if let member = familyCoordinator.state.members.first(where: { $0.name == "Rose Carter" }) { familyCoordinator.route = .memberPermissions(member.id) }
-            case "activity": familyCoordinator.route = .familyActivity
-            case "maker": familyCoordinator.route = .makerArchive
-            case "profile": familyCoordinator.route = .profile
-            case "settings": familyCoordinator.route = .settings
-            case "storage": familyCoordinator.route = .storage
-            case "notifications": familyCoordinator.route = .notifications
-            case "privacy": familyCoordinator.route = .privacy
-            case "data": familyCoordinator.route = .manageData
-            case "deletion": familyCoordinator.route = .accountDeletion
-            case "help": familyCoordinator.route = .help
-            default: familyCoordinator.route = .familyOverview
-            }
-        }
         _familyProfileCoordinator = StateObject(wrappedValue: familyCoordinator)
-        _activeSection = State(
-            initialValue: arguments.contains("-openProfile") ? .profile
-                : (arguments.contains("-openFamily") ? .family
-                    : (arguments.contains("-openLearn") ? .learn
-                        : (arguments.contains("-openCapture") ? .capture : .library)))
-        )
+        _activeSection = State(initialValue: .library)
     }
 
     var body: some View {
@@ -187,7 +149,7 @@ struct LibraryRootView: View {
             Text("You can continue learning or choose another lesson action.")
         }
         .tint(EchoTheme.terracotta)
-        .onChange(of: familyProfileCoordinator.handoff) { _, destination in
+        .onChange(of: familyProfileCoordinator.handoff) { destination in
             guard let destination else { return }
             familyProfileCoordinator.handoff = nil
             switch destination {

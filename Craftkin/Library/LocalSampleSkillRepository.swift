@@ -9,7 +9,7 @@ struct LocalSampleSkillRepository: SkillRepository {
     let skills: [SkillLesson]
     let makers: [FamilyMaker]
 
-    init(state: LibraryFixtureState) {
+    init(state: LibraryContentState) {
         guard state == .populated else {
             skills = []
             makers = []

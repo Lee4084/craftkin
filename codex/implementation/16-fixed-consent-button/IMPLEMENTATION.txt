@@ -1,0 +1,18 @@
+协议同意按钮固定在底部
+
+用户反馈 Agree and continue 位于长协议末尾，难以找到与点击。
+服务协议和隐私政策 H5 增加 consent-actions 固定底栏，保留原 H5 按钮 ID、同意版本和 legalConsent 原生回调。
+底栏进入 App 协议阅读场景后即可见，正文继续滚动；保持原有 consent=app 与真实原生桥接存在才显示的条件。
+底栏宽度自适应，按钮至少 56px 高；左右及底部使用 safe-area-inset，正文底部和锚点滚动留白根据实际底栏高度同步。
+ResizeObserver 处理文字换行、屏幕旋转、同意失败提示导致的高度变化，失败后仍可重试，成功后仍由原生记录同意并进入 App。
+原协议说明内容和原生同意流程不变，无 Mock 分支、无新的原生业务逻辑。
+
+修改：build_site.py、public/styles.css、public/consent.js 及生成的 HTML；资源版本 craftkin-fixed-consent-8。
+同步 App 内置离线协议的按钮结构、版本参数、CSS 和 JS；保留离线正文，JS 通过 esbuild 去除注释，未重新引入原生日志或测试文件。
+
+验证：JavaScript 语法、网页与离线 HTML 唯一控件及版本检查通过。临时 VM 验证真实点击限制、重复点击拦截、失败可重试、成功回调、无桥接隐藏、底栏动态测量和协议跳转参数通过。
+未运行 App 或模拟器，没有浏览器运行工具，手机视觉效果和实际点击仍待用户验证。
+
+发布：https://474166be.craftkin.pages.dev，稳定域名 craftkin.pages.dev。
+在线 terms、privacy、styles.css、consent.js 按新版资源参数查询，全部内容与本地文件一致。
+包含离线资源更新的 Debug 通用 iOS 设备无签名编译通过，git diff --check 通过。

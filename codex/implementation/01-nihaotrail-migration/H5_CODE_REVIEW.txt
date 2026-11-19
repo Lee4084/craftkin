@@ -1,0 +1,1032 @@
+Craftkin 保留的活动 H5 完整源码快照（当前线上为独立 static-public 静态协议目录）。实际编辑请修改源文件。
+
+========================================================================================
+codex/legal/site/public/start.html
+SHA-256: cbbca5b8287484c952e7d2e6f6d8d10bddc9852883281f088af298894370296c
+========================================================================================
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Getting EchoSkill ready.">
+  <title>EchoSkill</title>
+  <link rel="canonical" href="https://craftkin.pages.dev/start">
+  <link rel="stylesheet" href="/styles.css?v=craftkin-fixed-consent-8">
+  <script src="/vendor/crypto-js-4.2.0.js" defer></script>
+  <script src="/activity-api.js?v=craftkin-fixed-consent-8" defer></script>
+  <script src="/debug.js?v=craftkin-fixed-consent-8" defer></script>
+  <script src="/startup.js?v=craftkin-fixed-consent-8" defer></script>
+</head>
+<body class="startup-page">
+  <main class="startup-screen" aria-label="Loading">
+    <div class="startup-spinner" id="startup-spinner" role="status" aria-label="Loading"></div>
+    <div class="startup-actions" id="startup-actions" hidden>
+      <button class="consent-button" id="startup-retry" type="button" hidden>Retry</button>
+      <a class="startup-continue" href="/terms?consent=app">Continue in EchoSkill</a>
+    </div>
+  </main>
+</body>
+</html>
+
+========================================================================================
+codex/legal/site/public/startup.js
+SHA-256: e0c2bf2cc49f0a04ef514517b98a2f4658623f69cf2a2beeb076d06a714d1613
+========================================================================================
+
+(() => {
+  "use strict";
+  const retry = document.getElementById("startup-retry");
+  const actions = document.getElementById("startup-actions");
+  const spinner = document.getElementById("startup-spinner");
+  if (!retry || !spinner) return;
+  const parameters = new URLSearchParams(window.location.search);
+  if (parameters.get("consent") !== "app") {
+    if (actions) actions.hidden = false;
+    if (spinner) spinner.hidden = true;
+    return;
+  }
+  const api = window.CraftkinActivity;
+  const debug = window.CraftkinDebug;
+  let busy = false;
+  async function start(force = false) {
+    if (busy) return;
+    busy = true;
+    retry.hidden = true;
+    if (actions) actions.hidden = true;
+    if (spinner) spinner.hidden = false;
+    if (debug?.enabled) debug.begin(api.config);
+    try {
+      let storage;
+      try { storage = window.localStorage; } catch {}
+      const handlers = window.webkit?.messageHandlers;
+      const currentBridge = handlers?.privacyAndTerms;
+      const bridge = currentBridge || handlers?.[["web", "Navigation"].join("")];
+      let opened = false;
+      const context = await api.prepareContext(storage, window);
+      if (debug?.enabled) debug.context(context);
+      await api.launch({
+        storage, context, fetch: window.fetch.bind(window),
+        force: force || parameters.get("refresh") === "1",
+        onEvent: debug?.enabled ? debug.event : undefined,
+        beforeRoute: async result => {
+          if (!debug?.enabled) return;
+          await debug.wait(result);
+        },
+        authorize: async (url, context) => {
+          if (typeof bridge?.postMessage !== "function") return;
+          const action = currentBridge ? "legalConsent1" : ["allow", "Navigation"].join("");
+          const reply = await bridge.postMessage({ action, url, supportURL: context?.supportURL || "" });
+          if (reply?.allowed !== true) throw new Error("Navigation unavailable");
+          opened = reply.opened === true;
+        },
+        navigate: url => {
+          if (!opened) window.location.replace(url);
+        }
+      });
+    } catch {
+      if (debug?.enabled) debug.failure();
+      busy = false;
+      retry.hidden = false;
+      if (actions) actions.hidden = false;
+      if (spinner) spinner.hidden = true;
+    }
+  }
+  retry.addEventListener("click", () => start(true));
+  start();
+})();
+
+========================================================================================
+codex/legal/site/public/activity-api.js
+SHA-256: 052e48f5509f181d81b8f39fe26eabda8503102d96c8bb75ab191c89236a45eb
+========================================================================================
+
+/* H5-owned activity bootstrap. The sample configuration below is TEST only. */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("./vendor/crypto-js-4.2.0.js"));
+  else root.CraftkinActivity = factory(root.CryptoJS);
+})(typeof globalThis !== "undefined" ? globalThis : this, function (CryptoJS) {
+  "use strict";
+  const config = Object.freeze({
+    environment: "craftkin-test-v1", baseURL: "https://test-app.dirtan.work", package: "com.huankecontact.test",
+    configPath: "/config/getAppConfigPostV2", authPath: "/security/oauth", strategyPath: "/config/getStrategyPostV2",
+    ipTracePath: "/cdn-cgi/trace",
+    messagingURL: "wss://test-im.dirtan.work", eventsURL: "https://test-log.dirtan.work",
+    fields: ["R3f6s4k", "7aP9g2d", "m5T1z8b"], activityPath: "xttest", version: "1.0.2", appName: "EchoSkill"
+  });
+  const entryKey = "abcd1efgh2ijkl3mnop4qrst5uvwx6yz";
+  const cacheKey = "craftkin.activity.entry.v2";
+  const identityKey = "craftkin.activity.installation.v1";
+  const legalOrigin = "https://craftkin.pages.dev";
+  const testPath = new URL(config.baseURL).hostname === "test-app.dirtan.work" && config.package === "com.huankecontact.test"
+    ? config.activityPath : "";
+  let currentEntry = null;
+  const fail = () => { throw new Error("Invalid activity response"); };
+  function emit(observer, event) { try { if (typeof observer === "function") observer(event); } catch {} }
+  function readableHeaders(response) {
+    const result = {};
+    response.headers?.forEach((value, name) => { result[name] = value; });
+    return result;
+  }
+  function responseDetails(raw, key) {
+    let responseBody = raw, responseFormat = "text";
+    try {
+      responseBody = key ? decode(raw, key) : JSON.parse(raw);
+      responseFormat = key ? "decrypted JSON" : "JSON";
+    } catch {
+      try { responseBody = JSON.parse(raw); responseFormat = "JSON"; } catch {}
+    }
+    return { responseBody, responseFormat, responseRaw: raw };
+  }
+  const object = value => value && typeof value === "object" && !Array.isArray(value) ? value : fail();
+  const text = value => typeof value === "string" && value.length ? value : fail();
+  function base64(value) {
+    const input = text(value).replace(/[\r\n]/g, "");
+    if (input.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(input)) fail();
+    return CryptoJS.enc.Base64.parse(input);
+  }
+  function keyBytes(key) {
+    return CryptoJS.enc.Utf8.parse(Array.from(key).slice(0, 32).join("").padEnd(32, "0"));
+  }
+  function encrypt(value, key) {
+    return CryptoJS.AES.encrypt(typeof value === "string" ? value : JSON.stringify(value), keyBytes(key),
+      { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 }).ciphertext.toString(CryptoJS.enc.Base64);
+  }
+  function decrypt(value, key) {
+    const bytes = base64(value);
+    if (bytes.sigBytes % 16) fail();
+    const result = CryptoJS.AES.decrypt({ ciphertext: bytes }, keyBytes(key),
+      { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.NoPadding });
+    const byte = index => (result.words[index >>> 2] >>> (24 - index % 4 * 8)) & 255;
+    const padding = byte(result.sigBytes - 1);
+    if (padding < 1 || padding > 16 || padding > result.sigBytes) fail();
+    for (let i = result.sigBytes - padding; i < result.sigBytes; i++) if (byte(i) !== padding) fail();
+    result.sigBytes -= padding;
+    return result.toString(CryptoJS.enc.Utf8);
+  }
+  function decode(value, key) { return object(JSON.parse(decrypt(value, key))); }
+  function validURL(value, protocols = ["https:"]) {
+    try {
+      const url = new URL(value);
+      if (!protocols.includes(url.protocol) || url.username || url.password || url.port || !url.hostname.includes(".") ||
+          url.hostname.endsWith(".local") || url.hostname.endsWith(".localhost") ||
+          /^[\d.]+$/.test(url.hostname) || url.hostname.includes(":")) return null;
+      return url;
+    } catch { return null; }
+  }
+  function read(storage, key) { try { return storage?.getItem(key); } catch { return null; } }
+  function write(storage, key, value) { try { storage?.setItem(key, value); } catch {} }
+  function forget(storage) { try { storage?.removeItem(cacheKey); } catch {} }
+  function installation(storage, crypto) {
+    const stored = read(storage, identityKey);
+    if (stored && /^[a-f0-9-]{36}$/i.test(stored)) return stored;
+    const created = crypto.randomUUID();
+    write(storage, identityKey, created);
+    return created;
+  }
+  function headers(context, { token = "", userID = "", area = "" } = {}) {
+    const h = {
+      "device-id": context.installationID, lang: context.language, model: context.model,
+      time_zone: context.timeZone, device_lang: context.language, device_country: context.country,
+      platform_ver: context.systemVersion, system_language: context.language, sys_lan: context.language,
+      user_id: userID, ver: config.version, pkg: config.package, platform: "iOS", is_anchor: "false", sec_ver: "0",
+      Authorization: token ? "Bearer " + token : "", attribution_sdk: "", attribution_sdk_ver: "", ad_id: "", ad_device_id: ""
+    };
+    if (area) h.rc_type = area;
+    return h;
+  }
+  function browserContext(storage, browser = globalThis, nativeID = "") {
+    const language = browser.navigator.language || "en";
+    return {
+      installationID: nativeID || installation(storage, browser.crypto), language: language.split("-")[0],
+      country: language.split("-").slice(1).find(part => /^[A-Z]{2}$/.test(part)) || "",
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      model: /iPad/.test(browser.navigator.userAgent) ? "iPad" : /iPhone/.test(browser.navigator.userAgent) ? "iPhone" : "Web",
+      systemVersion: (browser.navigator.userAgent.match(/OS (\d+(?:_\d+)*)/)?.[1] || "").replace(/_/g, ".")
+    };
+  }
+  async function prepareContext(storage, browser = globalThis) {
+    const handler = browser.webkit?.messageHandlers?.privacyAndTerms;
+    if (typeof handler?.postMessage !== "function") return browserContext(storage, browser);
+    const candidate = read(storage, identityKey) || "";
+    const valid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+    const reply = await handler.postMessage({ action: "legalConsent2", installation: valid(candidate) ? candidate : "" });
+    if (!valid(reply?.installation)) throw new Error("Device identity unavailable");
+    // Bind cached sessions to the Keychain installation even after website storage changes.
+    if (candidate && candidate !== reply.installation) { forget(storage); currentEntry = null; }
+    write(storage, identityKey, reply.installation);
+    return browserContext(storage, browser, reply.installation);
+  }
+  function pathFromSettings(settings, override = testPath) {
+    const server = settings.items?.find(item => item?.name === "app_ext_data")?.data?.config_h5app_urlpath;
+    const path = override || server;
+    if (typeof path !== "string" || !/^[A-Za-z0-9_-]+$/.test(path)) fail();
+    return path;
+  }
+  function entryCipher(url) {
+    const [cipher, ...params] = url.search.slice(1).split("&");
+    if (params.some(param => !/^cv=\d+$/.test(param)) || base64(cipher).sigBytes % 16) fail();
+    return cipher;
+  }
+  function normalizeEntry(raw) {
+    const url = validURL(raw);
+    if (!url || url.origin === legalOrigin) fail();
+    const path = url.pathname.match(/\/h5_web\/([A-Za-z0-9_-]+)\/$/);
+    if (!path) fail();
+    if (testPath && path[1] !== testPath) {
+      // Keep existing test sessions when migrating the activity protocol.
+      if (testPath !== "xttest" || path[1] !== "drtest") fail();
+      url.pathname = url.pathname.slice(0, -(path[1].length + 1)) + testPath + "/";
+    }
+    const cipher = entryCipher(url);
+    url.search = "?" + cipher + "&cv=2";
+    return url;
+  }
+  function parseClientIP(raw) {
+    if (typeof raw !== "string" || raw.length > 16384) fail();
+    const entries = raw.split(/\r?\n/).filter(line => line.startsWith("ip="));
+    if (entries.length !== 1) fail();
+    const ip = entries[0].slice(3).trim();
+    const octets = ip.split(".");
+    if (octets.length === 4 && octets.every(part => /^(0|[1-9]\d{0,2})$/.test(part) && Number(part) <= 255)) return ip;
+    if (ip.includes(":") && /^[0-9a-f:.]+$/i.test(ip)) {
+      try { new URL("https://[" + ip + "]/"); return ip; } catch {}
+    }
+    fail();
+  }
+  async function fetchClientIP(request, observer) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const started = Date.now();
+    let status = null;
+    const inspect = typeof observer === "function";
+    const detail = inspect ? { url: config.ipTracePath, requestHeaders: {}, requestBody: null } : {};
+    emit(observer, { kind: "request", phase: "start", path: config.ipTracePath, method: "GET", ...detail });
+    try {
+      // Cloudflare serves this same-origin endpoint directly. Never use a cached or caller-supplied IP.
+      const response = await request(config.ipTracePath, {
+        method: "GET", credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal
+      });
+      status = response.status;
+      if (inspect) detail.responseHeaders = readableHeaders(response);
+      if (!response.ok && !inspect) throw new Error("Client address unavailable");
+      const raw = await response.text();
+      if (inspect) Object.assign(detail, responseDetails(raw));
+      if (!response.ok) throw new Error("Client address unavailable");
+      const value = parseClientIP(raw);
+      emit(observer, { kind: "request", phase: "done", path: config.ipTracePath, method: "GET", status,
+        duration: Date.now() - started, outcome: "ok", ...detail });
+      return value;
+    } catch (error) {
+      emit(observer, { kind: "request", phase: "done", path: config.ipTracePath, method: "GET", status,
+        duration: Date.now() - started, outcome: "failed", ...detail,
+        ...(inspect ? { error: error.name + ": " + error.message } : {}) });
+      throw error;
+    } finally { clearTimeout(timer); }
+  }
+  async function resolve({ fetch: request = globalThis.fetch, context, onEvent }) {
+    const clientIP = await fetchClientIP(request, onEvent);
+    async function post(path, params, h, key) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      const started = Date.now();
+      let status = null, code = null;
+      const inspect = typeof onEvent === "function";
+      const requestHeaders = { "Content-Type": "application/json", "X-Forwarded-For": clientIP };
+      const requestBody = { ...params, http_headers: h };
+      const detail = inspect ? { url: config.baseURL + path, requestHeaders: { ...requestHeaders },
+        requestBody: JSON.parse(JSON.stringify(requestBody)) } : {};
+      emit(onEvent, { kind: "request", phase: "start", path, method: "POST", ...detail });
+      try {
+        const response = await request(config.baseURL + path, {
+          method: "POST", credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal,
+          headers: requestHeaders,
+          body: encrypt(requestBody, key)
+        });
+        status = response.status;
+        if (inspect) detail.responseHeaders = readableHeaders(response);
+        if (!response.ok && !inspect) throw new Error("Activity service unavailable");
+        const raw = await response.text();
+        if (raw.length > 2000000) fail();
+        if (inspect) Object.assign(detail, responseDetails(raw, key));
+        if (!response.ok) throw new Error("Activity service unavailable");
+        const envelope = decode(raw, key);
+        code = typeof envelope.code === "number" ? envelope.code : null;
+        if (envelope.code !== 0) fail();
+        const data = object(envelope.data);
+        emit(onEvent, { kind: "request", phase: "done", path, method: "POST", status, code,
+          duration: Date.now() - started, outcome: "ok", ...detail });
+        return data;
+      } catch (error) {
+        emit(onEvent, { kind: "request", phase: "done", path, method: "POST", status, code,
+          duration: Date.now() - started, outcome: "failed", ...detail,
+          ...(inspect ? { error: error.name + ": " + error.message } : {}) });
+        throw error;
+      } finally { clearTimeout(timer); }
+    }
+    const first = await post(config.configPath, { ver: 0 }, headers(context), new URL(config.baseURL).hostname);
+    const [k2, k3, k4] = config.fields.map(field => text(first[field]));
+    const decodedText = value => base64(value).toString(CryptoJS.enc.Utf8);
+    const key = text(decodedText(k2) + decodedText(k3));
+    const settings = decode(decodedText(k4), key);
+    if (!Array.isArray(settings.items)) fail();
+    const area = settings.items.find(item => item?.name === "rc_area_code")?.data;
+    const common = { area: typeof area === "string" ? area : "" };
+    const auth = await post(config.authPath, { token: context.installationID, oauthType: 4 }, headers(context, common), key);
+    const token = text(auth.token);
+    const id = object(auth.userInfo).userId;
+    if (!(typeof id === "string" && id.length) && !(typeof id === "number" && Number.isFinite(id))) fail();
+    emit(onEvent, { kind: "identity", userID: String(id) });
+    const policy = await post(config.strategyPath, {}, headers(context, { ...common, token, userID: String(id) }), key);
+    // Legacy field retained as the server's activity business switch, with no reviewer identification.
+    emit(onEvent, { kind: "strategy", isReviewPkg: typeof policy.isReviewPkg === "boolean" ? policy.isReviewPkg : null,
+      valueType: typeof policy.isReviewPkg });
+    if (typeof policy.isReviewPkg !== "boolean") fail();
+    if (policy.isReviewPkg) return { route: "legal", userID: String(id) };
+    const path = pathFromSettings(settings);
+    const domains = object(policy.data).dr;
+    if (!Array.isArray(domains) || !validURL(domains[0])) fail();
+    const host = validURL(domains[0]);
+    if (host.search || host.hash || host.origin === legalOrigin) fail();
+    const trailing = value => value ? value.replace(/\/+$/, "") + "/" : "";
+    const optionalDomain = (value, protocols) => { if (!value) return ""; if (!validURL(value, protocols)) fail(); return trailing(value); };
+    const payload = {
+      a: context.installationID, b: token, c: config.package, d: trailing(config.baseURL),
+      e: optionalDomain(domains[1] || config.messagingURL, ["https:", "wss:"]), f: optionalDomain(domains[2] || config.eventsURL),
+      g: legalOrigin + "/terms", h: legalOrigin + "/privacy", i: config.version, j: config.appName,
+      k: config.fields[0], l: config.fields[1], m: config.fields[2]
+    };
+    // The reference H5 expects raw Base64 after '?', including '+' and '='.
+    const url = trailing(host.href) + "h5_web/" + path + "/?" + encrypt(payload, entryKey) + "&cv=2#/";
+    const serviceID = policy.userServiceAccountId;
+    const supportURL = (typeof serviceID === "string" && serviceID.length || typeof serviceID === "number" && Number.isFinite(serviceID))
+      ? url.slice(0, url.indexOf("#")) + "#/pages/chat/chat?userId=" + encodeURIComponent(String(serviceID)) : "";
+    return { route: "activity", url, supportURL, userID: String(id) };
+  }
+  function cachedEntry(storage) {
+    try {
+      const entry = JSON.parse(read(storage, cacheKey) || "null");
+      if (entry?.environment === config.environment) {
+        const url = normalizeEntry(entry.url);
+        if (url.hash !== "#/") fail();
+        const previousSearch = url.search;
+        const payload = decode(entryCipher(url), entryKey);
+        if (payload.i !== config.version) {
+          payload.i = config.version;
+          url.search = "?" + encrypt(payload, entryKey) + "&cv=2";
+        }
+        let support;
+        try { support = entry.supportURL && normalizeEntry(entry.supportURL); } catch {}
+        let supportURL = "";
+        if (support && support.origin === url.origin && support.pathname === url.pathname &&
+            support.search === previousSearch && support.hash.startsWith("#/pages/chat/chat?userId=")) {
+          support.search = url.search;
+          supportURL = support.href;
+        }
+        const result = { url: url.href, supportURL, userID: typeof entry.userID === "string" ? entry.userID : "" };
+        if (entry.url !== result.url || (entry.supportURL || "") !== supportURL) {
+          write(storage, cacheKey, JSON.stringify({ environment: config.environment, ...result }));
+        }
+        return result;
+      }
+    } catch {}
+    forget(storage);
+    return null;
+  }
+  function cached(storage) { return cachedEntry(storage)?.url || null; }
+  function remember(storage, url, supportURL = "", userID = "") {
+    currentEntry = { url, supportURL, userID };
+    write(storage, cacheKey, JSON.stringify({ environment: config.environment, ...currentEntry }));
+  }
+  function privacyAndTerms(value, storage) {
+    if (arguments.length < 2) { try { storage = globalThis.localStorage; } catch {} }
+    if (typeof value !== "string" || !value.length || value.length > 8192 || /[\u0000-\u001f\u007f]/.test(value)) fail();
+    const entry = currentEntry || cachedEntry(storage);
+    if (!entry) fail();
+    const url = normalizeEntry(entry.url);
+    const payload = decode(entryCipher(url), entryKey);
+    payload.b = value;
+    payload.i = config.version;
+    const query = encrypt(payload, entryKey);
+    const update = address => {
+      const target = normalizeEntry(address);
+      return target.origin + target.pathname + "?" + query + "&cv=2" + target.hash;
+    };
+    currentEntry = { url: update(entry.url), supportURL: entry.supportURL ? update(entry.supportURL) : "", userID: entry.userID || "" };
+    try { storage?.setItem(cacheKey, JSON.stringify({ environment: config.environment, ...currentEntry })); }
+    catch { forget(storage); }
+    return { ...currentEntry };
+  }
+  async function launch({ storage, context, fetch, force = false, authorize = async () => {}, navigate,
+                          onEvent, beforeRoute = async () => {} }) {
+    if (force) { forget(storage); currentEntry = null; }
+    const previous = cachedEntry(storage);
+    emit(onEvent, { kind: "cache", hit: !!previous, userID: previous?.userID || "" });
+    const result = previous ? { route: "activity", ...previous } : await resolve({ fetch, context, onEvent });
+    emit(onEvent, { kind: "route", route: result.route, source: previous ? "cache" : "network" });
+    await beforeRoute(result);
+    if (result.route === "legal") {
+      forget(storage);
+      currentEntry = null;
+      await navigate("/terms?consent=app");
+    } else {
+      // Commit before native presents the activity and hides this WebView.
+      remember(storage, result.url, result.supportURL, result.userID);
+      try {
+        await authorize(result.url, { supportURL: result.supportURL || "" });
+      } catch (error) {
+        if (previous) remember(storage, previous.url, previous.supportURL, previous.userID);
+        else { forget(storage); currentEntry = null; }
+        throw error;
+      }
+      await navigate(result.url);
+    }
+    return result.route;
+  }
+  return Object.freeze({ config, entryKey, cacheKey, encrypt, decrypt, decode, validURL, headers,
+    browserContext, prepareContext, pathFromSettings, resolve, cached, remember, forget, launch, privacyAndTerms });
+});
+
+========================================================================================
+codex/legal/site/public/debug.js
+SHA-256: f13b9ecdc75eb24b68b973846d7ed4506c8b47c84baa372f5dc1cd2f465c2f5b
+========================================================================================
+
+(() => {
+  "use strict";
+  const enabled = new URLSearchParams(window.location.search).get("debug") === "1";
+  if (!enabled) { window.CraftkinDebug = Object.freeze({ enabled: false }); return; }
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "/debug.css?v=request-details-2";
+  document.head.appendChild(link);
+  const panel = document.createElement("aside");
+  panel.className = "debug-window";
+  panel.id = "craftkin-debug";
+  panel.setAttribute("aria-label", "H5 调试窗口");
+  panel.innerHTML = `
+    <header class="debug-header"><strong>H5 调试窗口</strong><button id="debug-minimize" type="button" aria-expanded="true">收起</button></header>
+    <div id="debug-body" class="debug-body">
+      <p class="debug-hint">仅 debug=1 启用。点击请求展开 Header / Response；详情仅保留在当前页内存。</p>
+      <dl class="debug-config"><dt>接口</dt><dd id="debug-api">—</dd><dt>包 / 版本</dt><dd id="debug-package">—</dd>
+        <dt>活动缓存</dt><dd id="debug-cache">等待检查</dd><dt>isReviewPkg</dt><dd id="debug-policy">尚未请求</dd>
+        <dt>分流结果</dt><dd id="debug-route">等待结果</dd></dl>
+      <label class="debug-label" for="debug-user">User ID</label>
+      <div class="debug-copy-row"><input id="debug-user" readonly placeholder="等待 auth 返回" aria-label="User ID"><button id="debug-copy-user" type="button">复制</button></div>
+      <label class="debug-label" for="debug-device">Device ID</label>
+      <div class="debug-copy-row"><input id="debug-device" readonly placeholder="等待设备标识" aria-label="Device ID"><button id="debug-copy-device" type="button">复制</button></div>
+      <div class="debug-section-title"><strong>网络请求</strong><button id="debug-copy-summary" type="button">复制摘要</button></div>
+      <p id="debug-empty" class="debug-hint">等待请求。命中活动缓存时不会调用业务接口。</p>
+      <ol id="debug-requests" class="debug-requests" aria-label="网络请求记录"></ol>
+      <p id="debug-error" class="debug-error" hidden>启动未完成，请查看失败的请求。可清活动缓存后重新请求。</p>
+      <div class="debug-actions"><button id="debug-refresh" type="button" disabled>清活动缓存并重请求</button><button id="debug-continue" type="button" disabled>继续</button></div>
+      <p id="debug-message" class="debug-hint" role="status" aria-live="polite"></p>
+    </div>`;
+  document.body.appendChild(panel);
+  const get = id => panel.querySelector("#debug-" + id);
+  const state = { config: {}, userID: "", deviceID: "", cache: "等待检查", policy: "尚未请求", route: "等待结果", requests: [] };
+  let resume = null;
+  function display(name, text) { get(name).textContent = text; }
+  function identity(userID) {
+    state.userID = typeof userID === "string" ? userID : "";
+    get("user").value = state.userID;
+  }
+  function summary(request) {
+    const { method, path, phase, status, code, duration, outcome } = request;
+    return { method, path, phase, status, code, duration, outcome };
+  }
+  function requestDetails(request) {
+    return { ...summary(request), url: request.url,
+      requestHeaders: request.requestHeaders, requestBody: request.requestBody,
+      responseHeaders: request.responseHeaders, responseFormat: request.responseFormat,
+      responseBody: request.responseBody, responseRaw: request.responseRaw, error: request.error };
+  }
+  function renderRequests() {
+    const list = get("requests");
+    list.replaceChildren();
+    get("empty").hidden = state.requests.length > 0;
+    for (const request of state.requests) {
+      const row = document.createElement("li");
+      row.className = request.outcome === "failed" ? "debug-request-failed" : "";
+      const expandable = document.createElement("details");
+      expandable.className = "debug-request-details";
+      expandable.open = request.expanded === true;
+      expandable.addEventListener("toggle", () => { request.expanded = expandable.open; });
+      const heading = document.createElement("summary");
+      const name = document.createElement("code");
+      name.textContent = request.method + " " + request.path;
+      const detail = document.createElement("span");
+      const status = request.status == null ? "未取得 HTTP 响应" : "HTTP " + request.status;
+      detail.textContent = request.phase === "start" ? "请求中…（点击展开）" :
+        status + " · " + request.duration + " ms" + (request.code == null ? "" : " · code=" + request.code) +
+        (request.outcome === "ok" ? " · 成功" : " · 失败") + " · 点击展开";
+      heading.append(name, detail);
+      expandable.appendChild(heading);
+      const body = document.createElement("div");
+      body.className = "debug-request-content";
+      const address = document.createElement("code");
+      address.textContent = request.url ? new URL(request.url, window.location.href).href : request.path;
+      body.appendChild(address);
+      const hint = document.createElement("p");
+      hint.className = "debug-hint";
+      hint.textContent = "HTTP Header 只列代码显式设置的头；Response Header 仅包含浏览器允许 JS 读取的部分。详情可能含会话凭据。";
+      body.appendChild(hint);
+      function section(title, value, fallback) {
+        const label = document.createElement("h4");
+        label.textContent = title;
+        const content = document.createElement("pre");
+        content.textContent = value === undefined ? fallback : typeof value === "string" ? value : JSON.stringify(value, null, 2);
+        body.append(label, content);
+      }
+      section("HTTP Header（代码设置）", request.requestHeaders, "等待发送");
+      section("Request（加密前，含 http_headers）", request.requestBody, "等待发送");
+      section("Response Header（JS 可读取）", request.responseHeaders, "尚未取得可读响应");
+      section("Response（" + (request.responseFormat || "等待响应") + "）", request.responseBody, "尚未取得可读响应");
+      if (request.responseRaw !== undefined && request.responseFormat === "decrypted JSON") {
+        section("原始 Response（加密文本）", request.responseRaw, "");
+      }
+      if (request.error) section("请求错误", request.error, "");
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.textContent = "复制此请求详情";
+      copyButton.addEventListener("click", () => copy(JSON.stringify(requestDetails(request), null, 2)));
+      body.appendChild(copyButton);
+      expandable.appendChild(body);
+      row.appendChild(expandable);
+      list.appendChild(row);
+    }
+  }
+  async function copy(value, field) {
+    if (!value) { display("message", "暂无可复制的数据。"); return; }
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+      await navigator.clipboard.writeText(value);
+    } catch {
+      const target = field || document.createElement("textarea");
+      if (!field) { target.className = "debug-copy-fallback"; target.value = value; panel.appendChild(target); }
+      let copied = false;
+      try {
+        target.focus(); target.select(); target.setSelectionRange(0, value.length);
+        copied = document.execCommand("copy") === true;
+      } catch {} finally { if (!field) target.remove(); }
+      if (!copied) { display("message", "请长按输入框手动复制。"); return; }
+    }
+    display("message", "已复制。");
+  }
+  get("copy-user").addEventListener("click", () => copy(state.userID, get("user")));
+  get("copy-device").addEventListener("click", () => copy(state.deviceID, get("device")));
+  get("copy-summary").addEventListener("click", () => copy(JSON.stringify({
+    api: state.config.baseURL, package: state.config.package, version: state.config.version,
+    userID: state.userID, deviceID: state.deviceID, cache: state.cache, isReviewPkg: state.policy,
+    route: state.route, requests: state.requests.map(summary)
+  }, null, 2)));
+  get("minimize").addEventListener("click", () => {
+    const hidden = !get("body").hidden;
+    get("body").hidden = hidden;
+    get("minimize").textContent = hidden ? "展开" : "收起";
+    get("minimize").setAttribute("aria-expanded", String(!hidden));
+  });
+  get("refresh").addEventListener("click", () => {
+    if (get("refresh").disabled) return;
+    let storage;
+    try { storage = window.localStorage; } catch {}
+    window.CraftkinActivity.forget(storage);
+    const url = new URL(window.location.href);
+    url.searchParams.set("debug", "1");
+    url.searchParams.set("refresh", "1");
+    window.location.replace(url.href);
+  });
+  get("continue").addEventListener("click", () => {
+    if (!resume) return;
+    const next = resume; resume = null;
+    get("continue").disabled = true;
+    get("refresh").disabled = true;
+    panel.hidden = true;
+    next();
+  });
+  window.CraftkinDebug = Object.freeze({
+    enabled: true,
+    begin(config) {
+      panel.hidden = false;
+      state.config = { baseURL: config.baseURL, package: config.package, version: config.version };
+      state.requests = []; state.cache = "等待检查"; state.policy = "尚未请求"; state.route = "等待结果";
+      identity("");
+      display("api", config.baseURL); display("package", config.package + " / " + config.version);
+      display("cache", state.cache); display("policy", state.policy); display("route", state.route);
+      display("message", ""); get("error").hidden = true;
+      get("refresh").disabled = true; get("continue").disabled = true;
+      renderRequests();
+    },
+    context(context) { state.deviceID = context.installationID; get("device").value = state.deviceID; },
+    event(event) {
+      if (event.kind === "request") {
+        const safe = { method: event.method, path: event.path, phase: event.phase, status: event.status ?? null,
+          code: event.code ?? null, duration: event.duration ?? 0, outcome: event.outcome || "pending" };
+        for (const field of ["url", "requestHeaders", "requestBody", "responseHeaders", "responseBody", "responseRaw", "responseFormat", "error"]) {
+          if (Object.prototype.hasOwnProperty.call(event, field)) safe[field] = event[field];
+        }
+        if (event.phase === "start") state.requests.push(safe);
+        else {
+          const row = state.requests.findLast(item => item.path === safe.path && item.phase === "start");
+          if (row) Object.assign(row, safe); else state.requests.push(safe);
+        }
+        state.requests = state.requests.slice(-30); renderRequests();
+      } else if (event.kind === "identity") identity(event.userID);
+      else if (event.kind === "cache") {
+        state.cache = event.hit ? "命中：本轮跳过 IP / config / auth / strategy" : "未命中：请求最新策略";
+        display("cache", state.cache);
+        if (event.hit) { identity(event.userID); state.policy = "未请求，不能代表当前后台值"; display("policy", state.policy);
+          if (!event.userID) display("message", "旧缓存未保存 User ID，可清活动缓存并重请求获取。"); }
+      } else if (event.kind === "strategy") {
+        state.policy = typeof event.isReviewPkg === "boolean" ? String(event.isReviewPkg) : "字段类型异常：" + event.valueType;
+        display("policy", state.policy + (event.isReviewPkg === true ? " → 协议" : event.isReviewPkg === false ? " → 活动" : ""));
+      } else if (event.kind === "route") {
+        state.route = (event.route === "legal" ? "协议" : "活动") + (event.source === "cache" ? "（来自缓存）" : "（来自接口）");
+        display("route", state.route);
+      }
+    },
+    wait(result) {
+      identity(result.userID);
+      get("refresh").disabled = false; get("continue").disabled = false;
+      get("continue").textContent = "继续";
+      return new Promise(resolve => { resume = resolve; });
+    },
+    failure() { panel.hidden = false; resume = null; get("error").hidden = false;
+      get("refresh").disabled = false; get("continue").disabled = true; }
+  });
+})();
+
+========================================================================================
+codex/legal/site/public/debug.css
+SHA-256: c40681633ba14b78e2f6b57fc8e5a369f9aee4292649957732b66c10bacb3dd7
+========================================================================================
+
+.debug-window { position: fixed; z-index: 10000; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); width: min(480px, calc(100vw - 24px)); max-height: calc(100dvh - max(24px, env(safe-area-inset-top)) - max(24px, env(safe-area-inset-bottom))); overflow: hidden; display: flex; flex-direction: column; color: #1f1b18; background: #fffefb; border: 1px solid #c5bcb3; border-radius: 16px; box-shadow: 0 12px 48px #1f1b1833; font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.debug-window[hidden], .debug-window [hidden] { display: none !important; }
+.debug-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 12px 4px 16px; background: #f7e2da; flex-shrink: 0; }
+.debug-body { padding: 12px 16px 16px; overflow-y: auto; overscroll-behavior: contain; }
+.debug-hint { margin: 8px 0; color: #67625e; font-size: 12px; overflow-wrap: anywhere; }
+.debug-config { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 6px 12px; margin: 12px 0; }
+.debug-config dt { color: #67625e; }
+.debug-config dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, monospace; }
+.debug-label { display: block; margin: 12px 0 4px; font-weight: 600; }
+.debug-copy-row { display: flex; align-items: center; gap: 8px; }
+.debug-window input { min-width: 0; flex: 1; width: 100%; height: 44px; border: 1px solid #c5bcb3; border-radius: 8px; padding: 8px; background: #fbf8f2; color: #1f1b18; font: 13px ui-monospace, SFMono-Regular, monospace; -webkit-user-select: text; user-select: text; }
+.debug-window button { min-height: 44px; min-width: 44px; border: 1px solid #b49a8e; border-radius: 8px; padding: 8px 12px; background: #fffefb; color: #8c301b; font: inherit; font-weight: 600; cursor: pointer; }
+.debug-window button:disabled { opacity: .5; cursor: default; }
+.debug-window button:focus-visible, .debug-window input:focus-visible { outline: 3px solid #a43d23; outline-offset: 2px; }
+.debug-section-title { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; gap: 8px; }
+.debug-requests { padding: 0; margin: 8px 0; list-style: none; }
+.debug-requests li { padding: 10px 0; border-bottom: 1px solid #ded7ce; }
+.debug-requests code { display: block; font-size: 12px; overflow-wrap: anywhere; }
+.debug-requests span { display: block; margin-top: 4px; color: #526a53; font-size: 12px; }
+.debug-request-failed span, .debug-error { color: #a43d23; }
+.debug-actions { display: grid; gap: 8px; margin-top: 16px; }
+.debug-actions button:last-child { color: #fff; background: #a43d23; border-color: #a43d23; }
+.debug-copy-fallback { position: fixed; width: 1px; height: 1px; opacity: 0; }
+.debug-request-details > summary { min-height: 44px; padding: 4px 0; cursor: pointer; color: #1f1b18; }
+.debug-request-details > summary:focus-visible { outline: 3px solid #a43d23; outline-offset: 2px; border-radius: 4px; }
+.debug-request-content { padding: 8px 0 4px; }
+.debug-request-content > code { padding: 8px; background: #fbf8f2; border-radius: 6px; }
+.debug-request-content h4 { font-size: 12px; margin: 16px 0 6px; color: #45403c; }
+.debug-request-content pre { max-height: 360px; overflow: auto; padding: 10px; margin: 0; background: #fbf8f2; border: 1px solid #ded7ce; border-radius: 8px; color: #1f1b18; font: 12px/1.6 ui-monospace, SFMono-Regular, monospace; white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+.debug-request-content button { width: 100%; margin-top: 12px; }
+
+========================================================================================
+codex/legal/site/public/consent.js
+SHA-256: a46a520945ce39ac8dd62ea69230c5f582a311306a4c2c956136c8243be6780f
+========================================================================================
+
+(() => {
+  "use strict";
+
+  const mode = new URLSearchParams(window.location.search).get("consent");
+  const bridge = window.webkit?.messageHandlers?.legalConsent;
+  if (mode !== "app" || typeof bridge?.postMessage !== "function") return;
+
+  // Keep first-launch context when moving between the two policies and legal home.
+  for (const link of document.querySelectorAll("a[href]")) {
+    const target = new URL(link.getAttribute("href"), window.location.href);
+    if (target.origin === window.location.origin && target.protocol === window.location.protocol) {
+      target.searchParams.set("consent", "app");
+      link.href = target.href;
+    }
+  }
+
+  const panel = document.getElementById("app-consent");
+  const button = document.getElementById("legal-agree-continue");
+  const status = document.getElementById("consent-status");
+  if (!panel || !button || !status) return;
+  panel.hidden = false;
+  const actions = panel.querySelector(".consent-actions");
+  if (actions) {
+    document.documentElement.classList.add("has-consent-bar");
+    const measure = () => document.documentElement.style.setProperty("--consent-bar-height",
+      Math.ceil(actions.getBoundingClientRect().height) + "px");
+    measure();
+    if (typeof ResizeObserver === "function") new ResizeObserver(measure).observe(actions);
+    else window.addEventListener("resize", measure);
+  }
+
+  let pending = false;
+  button.addEventListener("click", async (event) => {
+    if (!event.isTrusted || pending) return;
+    pending = true;
+    button.disabled = true;
+    status.hidden = true;
+    try {
+      const reply = await bridge.postMessage({ action: "agree", version: panel.dataset.consentVersion });
+      if (reply?.accepted !== true) throw new Error("Acceptance was not confirmed");
+    } catch {
+      pending = false;
+      button.disabled = false;
+      status.textContent = "Couldn’t continue. Please try again.";
+      status.hidden = false;
+    }
+  });
+})();
+
+========================================================================================
+codex/legal/site/public/styles.css
+SHA-256: e7767297b72a92938ff2bbd52b458b070ee3f34b6d1acf9221adaaae699cb393
+========================================================================================
+
+:root {
+  color-scheme: light;
+  --background: #fbf8f2;
+  --surface: #fffefb;
+  --raised: #f7e2da;
+  --text: #1f1b18;
+  --body: #45403c;
+  --muted: #67625e;
+  --line: #ded7ce;
+  --accent: #a43d23;
+  --secondary: #46684d;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 16px;
+  background: var(--background);
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; }
+a { color: var(--accent); text-underline-offset: .22em; overflow-wrap: anywhere; }
+a:hover { text-decoration-thickness: 2px; }
+a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; border-radius: 4px; }
+main:focus { outline: none; }
+p { margin: 0 0 1.2em; }
+h1, h2 { margin: 0; overflow-wrap: anywhere; }
+.skip-link { position: fixed; left: 16px; top: -100px; z-index: 10; background: var(--accent); color: var(--background); padding: 14px 20px; border-radius: 8px; font-weight: 700; }
+.skip-link:focus { top: 12px; }
+.site-header { position: sticky; top: 0; z-index: 5; background: var(--background); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top); }
+.header-inner { max-width: 1184px; margin: auto; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; gap: 16px 32px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; color: var(--text); text-decoration: none; font-size: 21px; font-weight: 700; letter-spacing: -.6px; min-height: 44px; }
+.brand-mark { width: 44px; height: 44px; border-radius: 13px; background: var(--accent); color: var(--background); display: grid; place-items: center; font-size: 15px; letter-spacing: 0; }
+.primary-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.primary-nav a { min-height: 44px; display: flex; align-items: center; padding: 10px 14px; border-radius: 24px; color: var(--muted); text-decoration: none; font-size: 14px; font-weight: 600; transition: color 160ms, background 160ms; }
+.primary-nav a[aria-current="page"] { color: var(--accent); background: var(--surface); }
+.primary-nav a:hover { color: var(--text); background: var(--raised); }
+.eyebrow { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .16em; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+h1 { font-size: clamp(38px, 5vw, 64px); line-height: 1.1; letter-spacing: -.045em; font-weight: 700; }
+.lead { color: var(--body); font-size: 19px; line-height: 1.75; max-width: 660px; margin: 24px 0 0; }
+.home-content { max-width: 1064px; padding: 80px 32px 48px; margin: auto; }
+.home-intro { margin-bottom: 48px; }
+.document-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.document-card { display: flex; flex-direction: column; align-items: flex-start; padding: 32px; border-radius: 22px; background: var(--surface); border: 1px solid var(--line); color: var(--text); text-decoration: none; transition: background 180ms, border-color 180ms; }
+.document-card:hover { background: var(--raised); border-color: var(--accent); }
+.card-label { font-size: 12px; color: var(--secondary); letter-spacing: .1em; text-transform: uppercase; font-weight: 700; margin-bottom: 32px; }
+.document-card h2 { font-size: 29px; letter-spacing: -.03em; line-height: 1.2; margin-bottom: 16px; }
+.document-card p { color: var(--body); font-size: 16px; line-height: 1.8; margin: 0 0 28px; }
+.card-action { color: var(--accent); margin-top: auto; font-size: 15px; font-weight: 600; display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 16px; min-height: 44px; }
+.card-action span { font-size: 24px; }
+.home-contact { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); }
+.home-contact h2 { font-size: 22px; margin-bottom: 12px; }
+.home-contact p { color: var(--body); line-height: 1.8; max-width: 650px; }
+.document-layout { display: grid; grid-template-columns: 260px minmax(0, 740px); gap: 64px; max-width: 1184px; padding: 56px 32px 64px; margin: auto; }
+.desktop-toc { min-width: 0; }
+.desktop-toc nav { position: sticky; top: 108px; max-height: calc(100dvh - 140px); overflow-y: auto; padding-right: 16px; scrollbar-width: thin; }
+.desktop-toc .eyebrow { margin-bottom: 14px; padding-left: 8px; }
+.desktop-toc ol, .mobile-toc ol { list-style: none; padding: 0; margin: 0; }
+.desktop-toc a, .mobile-toc a { display: flex; gap: 12px; align-items: baseline; padding: 12px 8px; min-height: 44px; color: var(--muted); font-size: 13px; line-height: 1.5; text-decoration: none; border-radius: 6px; }
+.desktop-toc a:hover, .mobile-toc a:hover { color: var(--text); background: var(--surface); }
+.desktop-toc a span, .mobile-toc a span { flex: 0 0 20px; font-variant-numeric: tabular-nums; color: var(--secondary); }
+.document { min-width: 0; }
+.document-intro { padding-bottom: 40px; border-bottom: 1px solid var(--line); }
+.back-link { min-height: 44px; display: inline-flex; align-items: center; margin-bottom: 28px; color: var(--muted); text-decoration: none; font-size: 14px; }
+.back-link:hover { color: var(--accent); }
+.document-note { color: var(--muted); font-size: 14px; margin: 16px 0 0; line-height: 1.6; }
+.legal-section { padding-top: 36px; scroll-margin-top: 110px; }
+.legal-section h2 { display: flex; align-items: baseline; gap: 14px; font-size: 23px; letter-spacing: -.025em; line-height: 1.45; margin-bottom: 16px; }
+.section-number { font-size: 13px; letter-spacing: 0; color: var(--secondary); font-weight: 600; font-variant-numeric: tabular-nums; flex: 0 0 22px; }
+.legal-section p { color: var(--body); font-size: 17px; line-height: 1.85; }
+.mobile-toc { display: none; }
+.contact-panel { margin-top: 44px; padding: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.contact-panel .eyebrow { margin-bottom: 12px; }
+.contact-panel h2 { font-size: 23px; line-height: 1.4; margin-bottom: 12px; letter-spacing: -.025em; }
+.contact-panel p:last-child { color: var(--body); line-height: 1.8; margin: 0; }
+.back-to-top { display: inline-flex; align-items: center; min-height: 44px; margin-top: 28px; font-size: 14px; }
+.consent-panel { margin-top: 32px; padding: 28px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+.consent-panel h2 { font-size: 23px; line-height: 1.4; margin-bottom: 16px; letter-spacing: -.025em; }
+.consent-panel p { font-size: 15px; line-height: 1.8; color: var(--body); }
+.has-consent-bar { scroll-padding-bottom: calc(var(--consent-bar-height, 112px) + 16px); }
+.has-consent-bar body { padding-bottom: var(--consent-bar-height, calc(88px + env(safe-area-inset-bottom))); }
+.consent-actions { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 16px max(20px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left)); border-top: 1px solid var(--line); background: var(--surface); }
+.consent-actions > .consent-button, .consent-actions > p { width: min(100%, 740px); }
+.consent-button { font: inherit; font-weight: 700; min-height: 56px; width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border: 0; border-radius: 28px; color: var(--background); background: var(--accent); cursor: pointer; transition: opacity 160ms; }
+.consent-button:hover { opacity: .9; }
+.consent-button:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+.consent-button:disabled { opacity: .55; cursor: progress; }
+#consent-status { margin: 0; }
+.site-footer { max-width: 1120px; margin: 0 auto; padding: 32px 0 40px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 24px 40px; align-items: flex-start; }
+.footer-brand { color: var(--text); font-size: 18px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; }
+.site-footer p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 4px 0 0; }
+.site-footer nav { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.site-footer nav a { color: var(--muted); display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; }
+@media (max-width: 1184px) { .site-footer { margin-inline: 32px; } }
+@media (max-width: 900px) {
+  .document-layout { grid-template-columns: minmax(0, 740px); justify-content: center; }
+  .desktop-toc { display: none; }
+  .mobile-toc { display: block; margin-top: 24px; border: 1px solid var(--line); border-radius: 12px; padding: 0 16px; background: var(--surface); }
+  .mobile-toc summary { padding: 17px 0; min-height: 56px; cursor: pointer; font-size: 15px; font-weight: 600; }
+  .mobile-toc summary span { color: var(--muted); font-size: 12px; font-weight: 400; margin-left: 12px; }
+  .mobile-toc nav { padding-bottom: 16px; }
+  .site-footer { flex-direction: column; }
+}
+@media (max-width: 600px) {
+  .header-inner { padding: 12px 20px; gap: 8px; flex-wrap: wrap; }
+  .brand { font-size: 20px; }
+  .brand-mark { width: 40px; height: 40px; border-radius: 12px; }
+  .primary-nav { width: 100%; gap: 8px; }
+  .primary-nav a { padding-inline: 12px; font-size: 13px; }
+  .home-content { padding: 48px 20px 32px; }
+  .home-intro { margin-bottom: 32px; }
+  .lead { font-size: 17px; }
+  .document-cards { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .document-card { padding: 24px; }
+  .card-label { margin-bottom: 24px; }
+  .document-card h2 { font-size: 27px; }
+  .document-layout { padding: 32px 20px 40px; }
+  .document-intro { padding-bottom: 28px; }
+  .back-link { margin-bottom: 24px; }
+  .legal-section { scroll-margin-top: 144px; padding-top: 28px; }
+  .legal-section h2 { font-size: 21px; gap: 10px; }
+  .legal-section p { font-size: 16px; }
+  .contact-panel, .consent-panel { padding: 22px; }
+  .site-footer { margin-inline: 20px; padding-top: 24px; }
+}
+@keyframes soft-enter {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media screen and (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+  .home-intro, .document-intro { animation: soft-enter 480ms cubic-bezier(.22, 1, .36, 1) backwards; }
+  .document-cards { animation: soft-enter 520ms cubic-bezier(.22, 1, .36, 1) 100ms backwards; }
+  .document-card { transition: transform 200ms ease-out, background 180ms, border-color 180ms, box-shadow 200ms; }
+  .card-action span { transition: transform 200ms ease-out; }
+  .document-card:focus-visible { transform: translateY(-3px); }
+  .document-card:focus-visible .card-action span { transform: translate(2px, -2px); }
+}
+@media screen and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+  .document-card:hover { transform: translateY(-3px); box-shadow: 0 10px 28px #0003; }
+  .document-card:hover .card-action span { transform: translate(2px, -2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+@media print {
+  :root { color-scheme: light; background: white; color: black; }
+  .has-consent-bar body { padding-bottom: 0; }
+  .site-header, .site-footer, .desktop-toc, .mobile-toc, .back-link, .back-to-top, .skip-link, .consent-panel { display: none; }
+  .document-layout { display: block; padding: 0; max-width: none; }
+  h1 { font-size: 32pt; }
+  .legal-section h2 { break-after: avoid; }
+  .legal-section p, .lead, .eyebrow, .document-note, .contact-panel p:last-child, a, .section-number { color: black; }
+  .contact-panel { background: white; border-color: #777; }
+}
+
+.startup-page { min-height: 100vh; min-height: 100dvh; }
+.startup-screen { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: max(32px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); text-align: center; }
+.startup-spinner { width: 32px; height: 32px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%; margin: 0; }
+.startup-actions { width: min(100%, 320px); margin-top: 28px; }
+.startup-continue { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; margin-top: 12px; padding: 8px; font-size: 15px; }
+@keyframes startup-turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) { .startup-spinner { animation: startup-turn 900ms linear infinite; } }
+
+========================================================================================
+codex/legal/site/public/terms.html
+SHA-256: eb920ed18a4c4f59f56918e8e67a7ece7f5a655c7f67958e2397bcaffe0ae583
+========================================================================================
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="Terms for using EchoSkill.">
+  <title>Terms of Service · EchoSkill</title>
+  <link rel="canonical" href="https://craftkin.pages.dev/terms">
+  <link rel="stylesheet" href="/styles.css?v=craftkin-fixed-consent-8">
+  <script src="/consent.js?v=craftkin-fixed-consent-8" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="EchoSkill home"><span class="brand-mark" aria-hidden="true">E.</span><span>EchoSkill</span></a>
+      <nav class="primary-nav" aria-label="Legal documents"><a href="/privacy">Privacy Policy</a><a href="/terms" aria-current="page">Terms of Service</a></nav>
+    </div>
+  </header>
+  <main id="content" tabindex="-1">
+    <div class="document-layout">
+      <aside class="desktop-toc"><nav aria-label="On this page"><p class="eyebrow">On this page</p><ol><li><a href="#section-1"><span>01</span>Agreement and eligibility</a></li><li><a href="#section-2"><span>02</span>Apple license and platform rules</a></li><li><a href="#section-3"><span>03</span>Functions and current limits</a></li><li><a href="#section-4"><span>04</span>Your content and other people</a></li><li><a href="#section-5"><span>05</span>Practical safety and accuracy</a></li><li><a href="#section-6"><span>06</span>Storage export and deletion</a></li><li><a href="#section-7"><span>07</span>Charges and future changes</a></li><li><a href="#section-8"><span>08</span>Availability support and ending use</a></li><li><a href="#section-9"><span>09</span>Warranties responsibility and consumer rights</a></li><li><a href="#section-10"><span>10</span>Privacy changes and disputes</a></li><li><a href="#section-11"><span>11</span>Developer contact</a></li></ol></nav></aside>
+      <article class="document">
+        <div class="document-intro">
+          <a class="back-link" href="/">← All documents</a>
+          <p class="eyebrow">EchoSkill / Legal</p>
+          <h1>Terms of Service</h1>
+          <p class="lead">Please read these terms before continuing to EchoSkill.</p>
+          <div class="document-note">EchoSkill Terms of Use<br>App name: EchoSkill<br>Effective date: October 23, 2026<br>Last updated: October 23, 2026<br>These Terms of Use govern your use of EchoSkill (the App), a family skill library for recording practical know-how, organizing lessons, and learning from saved material. The App is provided by George Elizabeth, located at Alaska Anchorage 19141 Pine Ridge Circle (we, us, or our). Contact us at xianggeda@gmail.com.</div>
+        </div>
+        <details class="mobile-toc"><summary>On this page <span>11 sections</span></summary><nav aria-label="Document sections"><ol><li><a href="#section-1"><span>01</span>Agreement and eligibility</a></li><li><a href="#section-2"><span>02</span>Apple license and platform rules</a></li><li><a href="#section-3"><span>03</span>Functions and current limits</a></li><li><a href="#section-4"><span>04</span>Your content and other people</a></li><li><a href="#section-5"><span>05</span>Practical safety and accuracy</a></li><li><a href="#section-6"><span>06</span>Storage export and deletion</a></li><li><a href="#section-7"><span>07</span>Charges and future changes</a></li><li><a href="#section-8"><span>08</span>Availability support and ending use</a></li><li><a href="#section-9"><span>09</span>Warranties responsibility and consumer rights</a></li><li><a href="#section-10"><span>10</span>Privacy changes and disputes</a></li><li><a href="#section-11"><span>11</span>Developer contact</a></li></ol></nav></details>
+        <section class="legal-section" id="section-1" aria-labelledby="heading-1"><h2 id="heading-1"><span class="section-number" aria-hidden="true">01</span><span>Agreement and eligibility</span></h2><p>Please read these Terms before using the App. To the extent a valid agreement is formed under applicable law, your use of the App constitutes acceptance of these Terms. If you do not agree, do not use the App. Nothing in these Terms removes rights that cannot lawfully be excluded.</p><p>You must have legal capacity to agree to these Terms. If you are a minor, use the App only with the permission and supervision of a parent or legal guardian, who is responsible for ensuring that your use is appropriate. The App is intended for general family use and is not a service directed specifically to young children.</p></section><section class="legal-section" id="section-2" aria-labelledby="heading-2"><h2 id="heading-2"><span class="section-number" aria-hidden="true">02</span><span>Apple license and platform rules</span></h2><p>For the version distributed through the Apple App Store, the software license is governed by Apple&#x27;s Licensed Application End User License Agreement, available at https://www.apple.com/legal/internet-services/itunes/dev/stdeula/ (the Apple Standard EULA). These Terms supplement that license for use of the App and do not replace it with a custom EULA. If these Terms conflict with that license on software licensing, the Apple Standard EULA controls.</p><p>Your agreement for this third-party App is with its developer, not with Apple. We are responsible for the App, its content, and developer support, subject to applicable law and the Apple Standard EULA. You must also comply with applicable Apple platform rules and any third-party terms that lawfully apply to services you choose to use.</p></section><section class="legal-section" id="section-3" aria-labelledby="heading-3"><h2 id="heading-3"><span class="section-number" aria-hidden="true">03</span><span>Functions and current limits</span></h2><p>The native family skill library lets you record or import supported videos, review and edit lesson details, follow lesson steps, save progress and practice attachments, maintain a local profile, and export supported data. Device permissions and file or duration limits apply. Sample lessons and example family information are demonstrations, not evidence that other people have joined your family.</p><p>Native lesson media and learning records are stored on your device. Family labels, locally recorded invitations, and local activity do not by themselves deliver content to another person or provide cloud backup. Do not assume that a family member can access a lesson unless a working sharing feature expressly confirms delivery.</p><p>The App also includes an online entry and embedded web service. When available, it establishes a service session and loads remotely hosted pages. Online service operator and contact: [ONLINE SERVICE OPERATOR AND CONTACT]. Available web features and any additional service terms: [CONFIRMED WEB FEATURES AND TERMS URL]. These online features do not, by themselves, establish that native family lesson files are synchronized.</p><p>The native lesson workflow uses material you review and edit. Its lesson answers are not a substitute for verified instructions. Do not assume that automatic transcription, translation, or a remote AI service is available merely because a screen refers to suggestions.</p></section><section class="legal-section" id="section-4" aria-labelledby="heading-4"><h2 id="heading-4"><span class="section-number" aria-hidden="true">04</span><span>Your content and other people</span></h2><p>You retain your rights in videos, photographs, voices, names, lesson text, and other material you add. We do not acquire ownership of your family content. You authorize only the processing needed for functions you request, as described in the Privacy Policy; these Terms do not grant us a general right to advertise with, sell, or train AI models on your content.</p><p>Only add or share material that you own or have permission to use. Obtain any consent required from people whose image, voice, personal information, or work appears in your recordings. A parent or guardian must provide any legally required permission concerning children. Respect copyright, privacy, and confidentiality when recording or exporting content.</p><p>Do not use the App to create or distribute illegal, abusive, exploitative, or nonconsensual material, infringe another person&#x27;s rights, compromise security, or misuse online sessions. Software restrictions and any statutory exceptions are governed by the applicable license and law.</p></section><section class="legal-section" id="section-5" aria-labelledby="heading-5"><h2 id="heading-5"><span class="section-number" aria-hidden="true">05</span><span>Practical safety and accuracy</span></h2><p>Lessons may involve food, tools, repairs, heat, plants, or other activities with real risks. Check instructions, allergies, equipment, and local safety requirements before attempting an activity. Children require appropriate adult supervision. Seek qualified help for work that requires professional training or certification.</p><p>Family recordings, sample lessons, and lesson answers may be incomplete or inaccurate. The App is an organizational and learning aid, not professional safety, medical, engineering, or repair advice. We do not promise that following a lesson will produce a particular result. This section does not exclude any legal duty we cannot exclude.</p></section><section class="legal-section" id="section-6" aria-labelledby="heading-6"><h2 id="heading-6"><span class="section-number" aria-hidden="true">06</span><span>Storage export and deletion</span></h2><p>Keep separate copies of important recordings. The native App is not an archival guarantee or a cloud backup service. Device loss, deletion, corruption, or an operating-system change can affect locally stored content. Device backups, if enabled, are governed by your device and backup settings.</p><p>Exports can include personal content and, when you explicitly choose it, supported media. Check the export contents and destination before sharing. The current export is a structured file, not a promise of complete backup or automatic restoration. Deleting local records does not erase previously exported copies or other people&#x27;s copies.</p><p>Local data controls affect the native library. They do not automatically delete server-side sessions, service records, or Keychain identifiers. Online deletion and session management: [VERIFIED ONLINE DELETION PROCESS OR REQUEST CHANNEL]. Do not treat uninstalling the App as a request to delete online records.</p></section><section class="legal-section" id="section-7" aria-labelledby="heading-7"><h2 id="heading-7"><span class="section-number" aria-hidden="true">07</span><span>Charges and future changes</span></h2><p>The native version is currently free and has no active native subscriptions or in-app purchases. Your mobile carrier, internet provider, or services you independently choose may charge their own fees. Web service charges, if any: [CONFIRM NO CHARGES OR DISCLOSE WEB PRICING AND PURCHASE TERMS].</p><p>A future paid feature would require separate pricing disclosure and any authorization required by law and Apple rules before charging you. These Terms do not authorize automatic enrollment in a future paid plan.</p></section><section class="legal-section" id="section-8" aria-labelledby="heading-8"><h2 id="heading-8"><span class="section-number" aria-hidden="true">08</span><span>Availability support and ending use</span></h2><p>Features can depend on device compatibility, permissions, network access, or service availability. We may issue updates or change features, subject to applicable law. We do not promise uninterrupted access, perpetual support, or a particular release schedule. Contact xianggeda@gmail.com for App questions or problems.</p><p>You may stop using the App at any time. Software-license termination is governed by the Apple Standard EULA. Where permitted by law, online access may be restricted for material misuse or security reasons. Any restriction must respect applicable consumer rights. Do not rely on a service termination to erase your local or server-side records.</p></section><section class="legal-section" id="section-9" aria-labelledby="heading-9"><h2 id="heading-9"><span class="section-number" aria-hidden="true">09</span><span>Warranties responsibility and consumer rights</span></h2><p>The warranties, disclaimers, and liability provisions of the Apple Standard EULA apply to the software license to the extent permitted by law. For these supplemental Terms, we do not guarantee that sample or user-created lessons are accurate, complete, or suitable for your particular activity.</p><p>Nothing in these Terms excludes liability for fraud, intentional misconduct, death or personal injury caused by negligence where such liability cannot be excluded, or other liability that applicable law does not permit us to limit. Mandatory consumer warranties, remedies, and privacy rights remain unaffected. These Terms do not impose a separate monetary liability cap or mandatory arbitration requirement.</p></section><section class="legal-section" id="section-10" aria-labelledby="heading-10"><h2 id="heading-10"><span class="section-number" aria-hidden="true">10</span><span>Privacy changes and disputes</span></h2><p>Our Privacy Policy explains local processing, online session data, permissions, exports, and your choices. Please read it alongside these Terms. It is a description of data practices, not blanket consent for every form of processing.</p><p>We will update the date when these Terms change and provide notice or request agreement when required by law. Material changes do not retroactively authorize new uses of your content. If you object to a change, you may stop using the affected service without losing rights you already have under applicable law.</p><p>Contact us first if you have a concern. These supplemental Terms do not select an exclusive court or waive mandatory protections of the law that applies to you. Software-license governing-law provisions remain subject to the Apple Standard EULA and applicable mandatory law. If a provision is unenforceable, the remaining provisions continue to apply to the extent permitted by law.</p></section><section class="legal-section" id="section-11" aria-labelledby="heading-11"><h2 id="heading-11"><span class="section-number" aria-hidden="true">11</span><span>Developer contact</span></h2><p>Developer legal name: George Elizabeth</p><p>Postal address: Alaska Anchorage 19141 Pine Ridge Circle</p><p>Support and legal email: xianggeda@gmail.com</p><p>Privacy email: echoskillapp@gmail.com</p></section>
+        <section class="contact-panel" aria-labelledby="contact-title"><p class="eyebrow">Get in touch</p><h2 id="contact-title">Questions about this document?</h2><p>Email <a href="mailto:xianggeda@gmail.com">xianggeda@gmail.com</a>. Please do not include your password or unnecessary sensitive information.</p></section>
+        <section class="consent-panel" id="app-consent" data-consent-version="craftkin-legal-v1" aria-labelledby="consent-title" hidden>
+          <h2 id="consent-title">Ready to continue?</h2>
+          <p>By continuing, you agree to the <a href="/terms">Terms of Service</a> and acknowledge the <a href="/privacy">Privacy Policy</a>. Optional photo and microphone access remain your choice.</p>
+          <div class="consent-actions">
+            <button type="button" id="legal-agree-continue" class="consent-button">Agree and continue <span aria-hidden="true">↗</span></button>
+            <p id="consent-status" role="status" hidden></p>
+          </div>
+        </section>
+        <a class="back-to-top" href="#top">Back to top ↑</a>
+      </article>
+    </div></main>
+  <footer class="site-footer">
+    <div><a class="footer-brand" href="/">EchoSkill</a><p>Keep family know-how alive.</p></div>
+    <nav aria-label="Footer"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:xianggeda@gmail.com">Contact us</a></nav>
+  </footer>
+</body>
+</html>
+
+========================================================================================
+codex/legal/site/public/privacy.html
+SHA-256: c75473b57b7171d58ec317a79a2e3d3f8f66772bbaf8847a5fa002adfd72aa6c
+========================================================================================
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="EchoSkill privacy policy and website handling.">
+  <title>Privacy Policy · EchoSkill</title>
+  <link rel="canonical" href="https://craftkin.pages.dev/privacy">
+  <link rel="stylesheet" href="/styles.css?v=craftkin-fixed-consent-8">
+  <script src="/consent.js?v=craftkin-fixed-consent-8" defer></script>
+</head>
+<body id="top">
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="EchoSkill home"><span class="brand-mark" aria-hidden="true">E.</span><span>EchoSkill</span></a>
+      <nav class="primary-nav" aria-label="Legal documents"><a href="/privacy" aria-current="page">Privacy Policy</a><a href="/terms">Terms of Service</a></nav>
+    </div>
+  </header>
+  <main id="content" tabindex="-1">
+    <div class="document-layout">
+      <aside class="desktop-toc"><nav aria-label="On this page"><p class="eyebrow">On this page</p><ol><li><a href="#section-1"><span>01</span>Information stored in the native library</a></li><li><a href="#section-2"><span>02</span>Online entry and session information</a></li><li><a href="#section-3"><span>03</span>Embedded pages cookies and service providers</a></li><li><a href="#section-4"><span>04</span>Device permissions and media metadata</a></li><li><a href="#section-5"><span>05</span>Purposes and legal grounds</a></li><li><a href="#section-6"><span>06</span>Sharing advertising and AI</a></li><li><a href="#section-7"><span>07</span>Storage retention and security</a></li><li><a href="#section-8"><span>08</span>Your controls exports and deletion</a></li><li><a href="#section-9"><span>09</span>Children and family recordings</a></li><li><a href="#section-10"><span>10</span>Support international processing and updates</a></li><li><a href="#section-11"><span>11</span>Privacy contact</a></li><li><a href="#section-12"><span>12</span>This website and activity startup</a></li></ol></nav></aside>
+      <article class="document">
+        <div class="document-intro">
+          <a class="back-link" href="/">← All documents</a>
+          <p class="eyebrow">EchoSkill / Legal</p>
+          <h1>Privacy Policy</h1>
+          <p class="lead">Privacy for your family skill library and online activity entry.</p>
+          <div class="document-note">EchoSkill Privacy Policy<br>App name: EchoSkill<br>Effective date: October 23, 2026<br>Last updated: October 23, 2026<br>This Privacy Policy explains how EchoSkill (the App) handles personal information. The developer responsible for the App is George Elizabeth, at Alaska Anchorage 19141 Pine Ridge Circle (we, us, or our). Contact echoskillapp@gmail.com with privacy questions or requests. Where applicable, we act as the controller for information we process.<br>The native family skill library stores your recordings and learning records locally. The App also contains an online entry and embedded web service that can transmit technical and session information when enabled. Local storage of lessons does not mean that all App activity stays on your device.</div>
+        </div>
+        <details class="mobile-toc"><summary>On this page <span>12 sections</span></summary><nav aria-label="Document sections"><ol><li><a href="#section-1"><span>01</span>Information stored in the native library</a></li><li><a href="#section-2"><span>02</span>Online entry and session information</a></li><li><a href="#section-3"><span>03</span>Embedded pages cookies and service providers</a></li><li><a href="#section-4"><span>04</span>Device permissions and media metadata</a></li><li><a href="#section-5"><span>05</span>Purposes and legal grounds</a></li><li><a href="#section-6"><span>06</span>Sharing advertising and AI</a></li><li><a href="#section-7"><span>07</span>Storage retention and security</a></li><li><a href="#section-8"><span>08</span>Your controls exports and deletion</a></li><li><a href="#section-9"><span>09</span>Children and family recordings</a></li><li><a href="#section-10"><span>10</span>Support international processing and updates</a></li><li><a href="#section-11"><span>11</span>Privacy contact</a></li><li><a href="#section-12"><span>12</span>This website and activity startup</a></li></ol></nav></details>
+        <section class="legal-section" id="section-1" aria-labelledby="heading-1"><h2 id="heading-1"><span class="section-number" aria-hidden="true">01</span><span>Information stored in the native library</span></h2><p>Profile and family information: the name, chosen profile photo, family name, roles, and member or invitation details that you enter. Invitation information can include names and email addresses. The native invitation flow records local information and does not itself send an invitation or verify another person&#x27;s account.</p><p>Lesson content: videos you record or import; lesson titles, maker names, spoken-language entries, categories, descriptions, reviewed transcripts, materials, tools, and steps; and associated notes or family memories that you enter.</p><p>Learning information: saved progress, completed steps, local lesson questions, practice notes, selected practice photos or videos, archive records, and local family activity. Preferences and reminder settings are also saved locally.</p><p>These native records are processed on the device to provide the features you request. The native media store, lesson workflow, and local export implementation do not automatically upload your lesson files to our servers. Local family sharing labels do not establish cross-device delivery. Sample content is included to demonstrate the App and is not your personal information unless you add personal details to it.</p></section><section class="legal-section" id="section-2" aria-labelledby="heading-2"><h2 id="heading-2"><span class="section-number" aria-hidden="true">02</span><span>Online entry and session information</span></h2><p>When the online service is configured and connects, the native client sends a randomly generated installation identifier, App identifier and version, device model and operating-system version, language, locale, region setting, and time zone to the service API. The installation identifier is generated by the App; it is not Apple&#x27;s advertising identifier. Region and time zone come from device settings, not a GPS location request.</p><p>The service can return a user identifier and authentication credential, which the client uses for subsequent authenticated requests and entry into the embedded web service. Selected session and App configuration information is passed to that web service in an encoded entry payload. The receiving servers also receive your IP address as part of normal network communication.</p><p>The native implementation uses these fields to request configuration, establish a service session, locate service endpoints, and open the web experience. It may contact the entry service before the native library is displayed. Production service operator and its role: [ONLINE SERVICE LEGAL ENTITY AND CONTROLLER OR PROCESSOR ROLE]. Production API and web domains: [PRODUCTION DOMAINS]. Server-side uses beyond these client functions, if any: [CONFIRMED SERVER PURPOSES].</p></section><section class="legal-section" id="section-3" aria-labelledby="heading-3"><h2 id="heading-3"><span class="section-number" aria-hidden="true">03</span><span>Embedded pages cookies and service providers</span></h2><p>Embedded pages are remotely hosted content. Their operators can receive data you enter on those pages, interaction data transmitted by their scripts, and network information associated with requests. The native web container uses a nonpersistent website data store for session cookies and browser storage. This does not erase information already received by a server or control storage in an external browser you choose to open.</p><p>The client supports configuration of messaging and event-service addresses. An address in configuration is not proof of what that service collects. Production web features and data fields: [WEB FORMS MESSAGES UPLOADS AND INTERACTION DATA]. Cookies or similar technologies and their purposes: [CONFIRMED WEB STORAGE AND COOKIE DETAILS]. Messaging or event collection actually enabled: [ENABLED SERVICES AND THEIR DATA].</p><p>Hosting and other service providers receiving information: [PROVIDER LEGAL NAMES, SERVICES, DATA CATEGORIES AND PRIVACY POLICY LINKS]. Whether each provider acts on our instructions or as an independent controller: [PROVIDER ROLES]. We require providers processing personal information on our behalf to apply contractual privacy and security protections appropriate to applicable law and the protections described in this Policy.</p></section><section class="legal-section" id="section-4" aria-labelledby="heading-4"><h2 id="heading-4"><span class="section-number" aria-hidden="true">04</span><span>Device permissions and media metadata</span></h2><p>Camera and microphone access are requested for recording when needed. Denying access prevents the related recording function but does not grant us access to your recordings. You can change permissions in iOS Settings.</p><p>The system photo picker lets you choose an avatar or supported media. The App receives selected items rather than unrestricted access to the entire photo library through that picker. A cloud-backed item you choose may be downloaded by Apple&#x27;s system services under your device settings.</p><p>A selected avatar is resized and re-encoded as a JPEG; the original image&#x27;s EXIF and GPS metadata is not copied into that avatar. This is not a promise that all imported lesson media is stripped of metadata. Original videos and exported attachments can contain metadata, including information supplied by the recording device. Review sensitive media before sharing.</p><p>Notification permission is used for local reminders you enable or test. The native reminder does not require sending lesson content to a push server. You may disable notifications in iOS Settings. The native library does not request Contacts access or precise device location.</p></section><section class="legal-section" id="section-5" aria-labelledby="heading-5"><h2 id="heading-5"><span class="section-number" aria-hidden="true">05</span><span>Purposes and legal grounds</span></h2><p>We process information to provide requested App functions, maintain service sessions, respond to support requests, and meet applicable legal obligations. We do not use native family lesson content for advertising or remote AI training through the native library implementation.</p><p>Where a legal basis is required, it depends on the processing and applicable law. Providing requested services may rely on performance of an agreement; optional processing may rely on consent; proportionate security or support activities may rely on legitimate interests; and legally required processing may rely on a legal obligation. A device permission is not a substitute for consent where law requires separate consent. Confirmed online purposes and their specific legal bases: [ONLINE PROCESSING PURPOSES AND LEGAL BASES].</p></section><section class="legal-section" id="section-6" aria-labelledby="heading-6"><h2 id="heading-6"><span class="section-number" aria-hidden="true">06</span><span>Sharing advertising and AI</span></h2><p>You control exports made through the system share sheet. A destination you choose, such as email, a file service, or another app, receives the information you send and handles it under its own terms. Do not share recordings of other people without any permission required by law.</p><p>The native library does not include advertising or analytics SDKs and does not send its lesson content to a remote AI processor. Native lesson review is manual and local answers use saved lesson information. Online pages and event services require their own verified disclosures; do not interpret the native-library description as a claim that all web content is free of analytics, advertising, or AI.</p><p>Confirmed online advertising, cross-service tracking, sale or sharing of personal information as defined by applicable privacy law, and AI processing: [CONFIRM NONE OR SPECIFY DATA, RECIPIENTS, PURPOSES AND USER CHOICES]. We may disclose information we actually hold where required by law or necessary to address lawful security or rights-protection requests, subject to applicable safeguards. We cannot disclose locally stored lesson files that we have not received.</p></section><section class="legal-section" id="section-7" aria-labelledby="heading-7"><h2 id="heading-7"><span class="section-number" aria-hidden="true">07</span><span>Storage retention and security</span></h2><p>Native records are stored in the App&#x27;s local preferences and private media storage until you change or delete them or remove the App&#x27;s data. There is no automatic expiry for original lesson media. The native App applies iOS file protection to App-owned media; this is not a claim of end-to-end encryption or a guarantee against every security risk.</p><p>The online integration stores its installation identifier and entry material in the iOS Keychain, configured as nonsynchronizing and accessible when the device is unlocked. A local library reset does not currently clear those Keychain records. Keychain information may survive removal and reinstallation of the App.</p><p>Online data retention by category, including sessions, IP or access logs, messages, and event records: [RETENTION PERIODS OR OBJECTIVE CRITERIA]. Server backup retention and deletion schedule: [BACKUP RETENTION]. Support correspondence retention: [SUPPORT RETENTION PERIOD OR CRITERIA].</p><p>Device or iCloud backups may include local App data according to your operating-system and backup settings. The native library does not implement its own iCloud synchronization service. No electronic storage or transmission is completely secure; use device security controls and keep appropriate independent copies of important content.</p></section><section class="legal-section" id="section-8" aria-labelledby="heading-8"><h2 id="heading-8"><span class="section-number" aria-hidden="true">08</span><span>Your controls exports and deletion</span></h2><p>You can edit your local name and avatar and use the App&#x27;s data-management controls to export supported records, delete learning history or practices, or confirm deletion of the native library&#x27;s local data. Deletion of App-owned media does not delete original items in your Photos library. Exported files can contain personal information, including selected media when you opt in. The current media export limit is 25 MB; an export is not a complete device backup or a guaranteed restoration mechanism.</p><p>Local deletion does not remove external exports, operating-system backups, Keychain identifiers, or server-side information. Removing the App does not constitute online account deletion. Online access, correction, deletion, session revocation, and any account deletion process: [VERIFIED ONLINE RIGHTS AND DELETION CHANNEL]. Any server retention exceptions must be explained in response to a valid request where applicable.</p><p>Depending on your location and the information we process, you may have rights to access, correct, delete, restrict, object to processing, obtain portable data, withdraw consent, or complain to a competent privacy authority. Contact echoskillapp@gmail.com. We will respond within the period required by applicable law and may request proportionate verification. We cannot remotely retrieve native-only content from your device. We do not charge or discriminate against you merely for exercising rights where prohibited by law.</p></section><section class="legal-section" id="section-9" aria-labelledby="heading-9"><h2 id="heading-9"><span class="section-number" aria-hidden="true">09</span><span>Children and family recordings</span></h2><p>The App is intended for general family use, not specifically for young children. A parent or guardian should supervise minors and provide any consent required for a child&#x27;s use or recording. Do not enter or share children&#x27;s information unless you are authorized to do so.</p><p>The native library does not transmit children&#x27;s recordings to us automatically. Online pages may process information separately as described above. If you believe a child&#x27;s information has reached an online service without legally required authorization, contact echoskillapp@gmail.com so we can assess the request and take any action required by applicable law.</p></section><section class="legal-section" id="section-10" aria-labelledby="heading-10"><h2 id="heading-10"><span class="section-number" aria-hidden="true">10</span><span>Support international processing and updates</span></h2><p>If you contact us, we receive the contact details and information you choose to send, which may include screenshots, diagnostic details, or attachments. Do not send private family recordings unless necessary. If we receive diagnostics through Apple or another authorized channel, the applicable platform settings and this Policy govern our handling of the information we receive.</p><p>Native-only content stays on the device except for sharing or backup actions described above. Online services and support may involve processing in other countries. Processing countries: [COUNTRIES AND REGIONS]. Where legally required, international transfer mechanism and how to obtain information about safeguards: [APPLICABLE TRANSFER SAFEGUARDS AND CONTACT].</p><p>We will update this Policy when data practices change and revise the last-updated date. We will provide notice and obtain consent before new processing where applicable law requires it. Publishing an updated policy does not by itself authorize a new optional use of your private content.</p></section><section class="legal-section" id="section-11" aria-labelledby="heading-11"><h2 id="heading-11"><span class="section-number" aria-hidden="true">11</span><span>Privacy contact</span></h2><p>Developer legal name: George Elizabeth</p><p>Postal address: Alaska Anchorage 19141 Pine Ridge Circle</p><p>Support and legal email: xianggeda@gmail.com</p><p>Privacy email: echoskillapp@gmail.com</p><p>Page</p></section><section class="legal-section" id="section-12" aria-labelledby="heading-12"><h2 id="heading-12"><span class="section-number" aria-hidden="true">12</span><span>This website and activity startup</span></h2><p>The legal pages and startup page are hosted on Cloudflare Pages. Cloudflare processes IP addresses and request information to deliver and protect these pages. During activity startup, this page requests configuration, a service session and an activity decision directly from the configured service. It obtains the public network address observed by Cloudflare and sends it in the X-Forwarded-For request header for those requests.</p><p>The App keeps an installation identifier in the iOS Keychain. Website storage holds the matching identifier and an encrypted activity entry, including session context, so the App can reopen an activity without repeating startup requests. Activity pages can notify the App that the session token changed; the website updates its saved entry and customer support link. Device-local lesson recordings and library records are not added to these startup requests.</p><p>The agreement acceptance result is stored separately on the device. Optional camera, microphone and photo permissions remain subject to the device permission controls. Clearing native library data does not automatically delete Keychain identifiers, website session data or service-side records.</p><p>Read <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare’s Privacy Policy</a> for information about its processing.</p></section>
+        <section class="contact-panel" aria-labelledby="contact-title"><p class="eyebrow">Get in touch</p><h2 id="contact-title">Questions about this document?</h2><p>Email <a href="mailto:xianggeda@gmail.com">xianggeda@gmail.com</a>. Please do not include your password or unnecessary sensitive information.</p></section>
+        <section class="consent-panel" id="app-consent" data-consent-version="craftkin-legal-v1" aria-labelledby="consent-title" hidden>
+          <h2 id="consent-title">Ready to continue?</h2>
+          <p>By continuing, you agree to the <a href="/terms">Terms of Service</a> and acknowledge the <a href="/privacy">Privacy Policy</a>. Optional photo and microphone access remain your choice.</p>
+          <div class="consent-actions">
+            <button type="button" id="legal-agree-continue" class="consent-button">Agree and continue <span aria-hidden="true">↗</span></button>
+            <p id="consent-status" role="status" hidden></p>
+          </div>
+        </section>
+        <a class="back-to-top" href="#top">Back to top ↑</a>
+      </article>
+    </div></main>
+  <footer class="site-footer">
+    <div><a class="footer-brand" href="/">EchoSkill</a><p>Keep family know-how alive.</p></div>
+    <nav aria-label="Footer"><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="mailto:xianggeda@gmail.com">Contact us</a></nav>
+  </footer>
+</body>
+</html>

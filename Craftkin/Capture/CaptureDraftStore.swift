@@ -30,12 +30,3 @@ final class UserDefaultsCaptureDraftStore: CaptureDraftStoring {
         defaults.removeObject(forKey: key)
     }
 }
-
-@MainActor
-final class InMemoryCaptureDraftStore: CaptureDraftStoring {
-    private var value: CaptureDraft?
-
-    func load() throws -> CaptureDraft? { value }
-    func save(_ draft: CaptureDraft) throws { value = draft }
-    func delete() throws { value = nil }
-}

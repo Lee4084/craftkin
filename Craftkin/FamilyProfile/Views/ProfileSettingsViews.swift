@@ -52,7 +52,7 @@ struct MyProfileView: View {
 struct SettingsView: View {
     @ObservedObject var coordinator: FamilyProfileCoordinator
     @State private var editsProfile = false
-    @Environment(\.appRootActions) private var rootActions
+    @Environment(\.localAppActions) private var rootActions
     var body: some View {
         EchoScreen {
             FamilyPageHeader(backTitle: "Profile", title: "Settings", onBack: coordinator.showProfile)
@@ -68,13 +68,7 @@ struct SettingsView: View {
                 ("externaldrive.badge.person.crop", "Manage My Data", "Export and removal controls", .manageData)
             ])
             settingsSection("SUPPORT", [("questionmark.circle", "Help & Support", "Guides and diagnostics", .help)])
-            EchoCard {
-                EchoRouteRow(icon: "globe", title: IntegrationConstants.Text.title, subtitle: IntegrationConstants.Text.subtitle) {
-                    rootActions?.login()
-                }
-                .accessibilityIdentifier(IntegrationConstants.Text.entryID)
-            }
-            EchoEyebrow(text: IntegrationConstants.Text.legal)
+            EchoEyebrow(text: "LEGAL")
             EchoCard { LegalDocumentLinks() }
             Button("Sign Out") { rootActions?.signOut() }.buttonStyle(EchoSecondaryButtonStyle())
             Text("Made for the skills families don’t want to lose.").font(.caption).frame(maxWidth: .infinity).foregroundStyle(EchoTheme.secondaryInk)
@@ -114,25 +108,9 @@ struct NotificationsView: View {
             EchoEyebrow(text: "Family")
             EchoCard { notificationToggle("New family lessons", \.newFamilyLessons); notificationToggle("Shared practices", \.sharedPractices); notificationToggle("Family comments", \.familyComments); notificationToggle("Member invitations", \.memberInvitations) }
             EchoCard { Toggle("Show details on Lock Screen", isOn: Binding(get: { coordinator.state.settings.showLockScreenDetails }, set: coordinator.setShowLockScreenDetails)); Text("When off, notifications reveal no family content.").font(.footnote).foregroundStyle(EchoTheme.secondaryInk) }
-            Button("Send a Test Notification") { Task { await sendTest() } }.buttonStyle(EchoSecondaryButtonStyle())
         }.task { let settings = await UNUserNotificationCenter.current().notificationSettings(); authorization = settings.authorizationStatus == .authorized ? "Allowed" : (settings.authorizationStatus == .denied ? "Not Allowed" : "Not Requested") }
     }
     private func notificationToggle(_ title: String, _ keyPath: WritableKeyPath<FamilySettings, Bool>) -> some View { Toggle(title, isOn: Binding(get: { coordinator.state.settings[keyPath: keyPath] }, set: { coordinator.setNotification(keyPath, enabled: $0) })) }
-    private func sendTest() async {
-        do {
-            let center = UNUserNotificationCenter.current()
-            let allowed = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            guard allowed else { authorization = "Not Allowed"; coordinator.notice = "Enable notifications in iOS Settings to receive a test."; return }
-            authorization = "Allowed"
-            let content = UNMutableNotificationContent()
-            content.title = "EchoSkill"
-            content.body = "Your test reminder is ready."
-            content.sound = .default
-            try await center.add(UNNotificationRequest(identifier: "echoskill.test", content: content,
-                                                      trigger: UNTimeIntervalNotificationTrigger(timeInterval: 3, repeats: false)))
-            coordinator.notice = "Test reminder scheduled. Background the app to see it."
-        } catch { coordinator.notice = "The reminder could not be scheduled. Please try again." }
-    }
     private func openSettings() { guard let url = URL(string: UIApplication.openSettingsURLString) else { return }; UIApplication.shared.open(url) }
 }
 

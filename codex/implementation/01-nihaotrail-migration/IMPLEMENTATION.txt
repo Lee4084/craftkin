@@ -1,0 +1,19 @@
+Craftkin 迁移结果
+
+已移除：ActivityEntry 旧 Worker/部署脚本/旧测试，以及 Craftkin/WebIntegration 的旧原生接口客户端、服务配置、路由、页面控制器、旧 A/B 恢复和截屏遮挡逻辑。没有远程删除旧 Worker；代码不再使用该项目。
+
+已迁移：NihaoTrail 当前启动 Loading、H5 config/auth/strategy、真实 IP XFF、协议 H5 同意与 UserDefaults、活动持久缓存与免接口恢复、全屏 WKWebView、媒体免手势播放、编号单例交互、Token/客服地址同步、cv=2 和 xttest。
+
+保留：原有 Keychain 设备身份（服务/账户/可访问策略不变）、Craftkin 接口域名和包/字段配置、现有业务页面和本地学习资料；Bundle ID、签名、部署版本和 App 版本未改。原生引导完成后直接进入原有资料库，不再调用旧在线登录。清空学习资料和本地 Sign Out 不视为撤销协议，也不删除设备身份。
+
+新增原生身份交互使用同一个 privacyAndTerms 消息处理器，动作 legalConsent2，在任何启动业务接口之前取得 Keychain 标识。没有第二套旧网页桥接或原生网络客户端。
+
+独立 Cloudflare Pages 已使用本机账号创建并发布：craftkin；稳定入口 https://craftkin.pages.dev/start?consent=app 。部署 https://cf798ab2.craftkin.pages.dev 。该站由手机 H5 直连接口，没有重用旧 Worker 代发。
+
+原协议源文档有未填写字段，已原样保留，详见 codex/legal/site/README.txt。旧域名 localStorage 不可跨域读；保留身份依靠已有 Keychain 记录。
+
+验证：43 项 H5 测试、19 项 Swift 宿主逻辑测试通过；iOS build-for-testing 编译通过。线上页面/脚本逐字节匹配、三个 POST CORS 允许新域名和 XFF，完整链路均 HTTP 200；最终活动 /h5_web/xttest/ HTTP 200，cv=2 在密文外，解密字段仅 a–m，已生成客服上下文。未记录 Token 或密文入口；未运行模拟器或真机。
+
+手机待验收：升级后 Keychain ID 保持、真实同意按钮、同意后重启、活动缓存杀进程恢复、Token 更新后立即开客服、视频/语音和全屏。UI 测试已改为点击内置 H5 的真实按钮，当前只编译未运行。
+
+本目录 NATIVE_CODE_REVIEW.txt、H5_CODE_REVIEW.txt 提供当前完整活动代码，测试与部署日志位于 codex/verification/（日志按 .gitignore 不提交）。没有 Git 提交或推送；NihaoTrail 源项目保持不变。

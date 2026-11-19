@@ -1,0 +1,31 @@
+EchoSkill / Codemagic 发布配置
+
+GitHub：Lee4084/craftkin，分支 main。
+工作流：ios-app-store-upload；配置文件为仓库根目录 codemagic.yaml。
+工程 / Scheme：Craftkin.xcodeproj / Craftkin。
+正式 Bundle ID：com.echoskill.app；最低 iOS 15.6；营销版本 1.0.0。
+使用 App Store 分发签名，读取该版本已上传的最高 TestFlight 构建号后加 1。
+当前配置仅上传 IPA 到 App Store Connect，不自动提交审核或分发给测试组。
+未设置推送触发器；配置好账号后手动或通过已授权 API 触发。
+
+一次性账号配置（目前尚未完成）：
+1. 在 Apple Developer / App Store Connect 创建对应 com.echoskill.app 的标识和 App 记录，记录 App 的数字 Apple ID。
+2. 在 Codemagic 添加 GitHub 仓库 Lee4084/craftkin，选择此工作流。
+3. 在 Codemagic Code signing identities 中配置可匹配 com.echoskill.app 的 Apple Distribution 证书和 App Store provisioning profile，并包含证书私钥。此工作流不会把本机 huankeProfileDev 开发描述文件用于上传。
+4. 创建环境变量组 app_store_credentials，包含：
+   APP_STORE_APPLE_ID：App Store Connect 中该 App 的数字 Apple ID，不是 Bundle ID。
+   APP_STORE_CONNECT_PRIVATE_KEY：App Manager 或相应授权的 App Store Connect API .p8 私钥正文，标记为 Secret。
+   APP_STORE_CONNECT_KEY_IDENTIFIER：对应 Key ID。
+   APP_STORE_CONNECT_ISSUER_ID：对应 Issuer ID。
+5. 完成后触发 main 上的 ios-app-store-upload。API 触发还需有已授权的 Codemagic API Token 和项目 App ID。
+
+密钥仅保存在 Codemagic Secret 或用户指定的本机凭据位置，不写入仓库或聊天。
+现有本机 Apple 开发团队未替换；Codemagic 构建时通过分发描述文件设置正确的签名团队。
+保留活动 H5 中的测试接口参数不因原生 Bundle ID 修改而自动改成正式值；当前线上仍为静态协议。
+根入口与未来活动触达等审查事项见 codex/review/app-store-2026-11-19/REVIEW.txt，本次上传配置不改变业务实现。
+
+官方参考：
+https://docs.codemagic.io/yaml-quick-start/building-a-native-ios-app/
+https://docs.codemagic.io/yaml-publishing/app-store-connect/
+
+本机验证（2026-11-19）：共享 Scheme XML、Codemagic YAML 和 shell 语法检查通过；正式包名的 Release 无签名构建成功，产物 Bundle ID com.echoskill.app、版本 1.0.0 (1)、最低 iOS 15.6。日志 /tmp/craftkin-production-bundle-build.log。未执行真实分发签名、Codemagic 构建或 Apple 上传，等待账号/发布凭据接入。
