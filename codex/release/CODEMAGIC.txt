@@ -29,3 +29,5 @@ https://docs.codemagic.io/yaml-quick-start/building-a-native-ios-app/
 https://docs.codemagic.io/yaml-publishing/app-store-connect/
 
 本机验证（2026-11-19）：共享 Scheme XML、Codemagic YAML 和 shell 语法检查通过；正式包名的 Release 无签名构建成功，产物 Bundle ID com.echoskill.app、版本 1.0.0 (1)、最低 iOS 15.6。日志 /tmp/craftkin-production-bundle-build.log。未执行真实分发签名、Codemagic 构建或 Apple 上传，等待账号/发布凭据接入。
+
+浏览器接入进度（2026-11-19）：已通过用户当前登录的 Chrome 会话访问 Codemagic，并在 craftkin 应用执行配置扫描，识别 main 上的 ios-app-store-upload 工作流。项目：https://codemagic.io/app/6afe93f4c31c756b90884177/settings 。账号现有 Apple 集成能够读取描述文件，但两组授权均未返回 com.echoskill.app 的描述文件。尚未选择最终 Apple 发布账号、创建分发资料、启动云构建或上传 Apple。需先由用户确认该 App 所属的 Apple 开发者账号；浏览器已可操作，不再以本机缺 Codemagic API Token 作为当前操作的前提。
